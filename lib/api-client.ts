@@ -46,6 +46,19 @@ export async function searchProductsRequest(
   return data.products;
 }
 
+export async function listLabelProductsRequest(
+  query: string,
+  signal?: AbortSignal,
+): Promise<Product[]> {
+  const params = query.trim() === "" ? "" : `?q=${encodeURIComponent(query.trim())}`;
+  const response = await fetch(`/api/products/labels${params}`, { signal });
+
+  if (!response.ok) throw await toApiError(response);
+
+  const data = (await response.json()) as ProductSearchResponse;
+  return data.products;
+}
+
 export async function createInquiryRequest(
   payload: CreateInquiryRequest,
 ): Promise<string> {

@@ -28,3 +28,39 @@ body {
   background-color: var(--color-porcelain-100);
   color: var(--color-porcelain-950);
 }
+
+@media print {
+  html,
+  body {
+    background: #fff;
+    color: #000;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .print-chrome,
+  .print-controls {
+    display: none !important;
+  }
+
+  .label-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .label-sheet svg,
+  .label-card {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}
+
+html[data-print-preview="true"] .print-chrome,
+html[data-print-preview="true"] .print-controls {
+  display: none !important;
+}
+
+html[data-print-preview="true"] body {
+  background: #fff;
+  color: #000;
+}

@@ -32,9 +32,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="flex min-h-full flex-col font-sans">
         <InquiryProvider>
-          <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col bg-white shadow-sm">
+          <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col bg-white shadow-sm print:max-w-none print:shadow-none">
             <SiteHeader />
-            <main className="flex-1 px-4 pt-4 pb-24">{children}</main>
+            <main className="flex-1 px-4 pt-4 pb-24 print:p-0">{children}</main>
             <BottomNav />
           </div>
         </InquiryProvider>

@@ -6,6 +6,9 @@ import { DatabaseError } from "./errors";
 
 export const MAX_SEARCH_RESULTS = 30;
 
+/** Ceiling for the labels catalogue. A booth run is a few hundred SKUs. */
+export const MAX_LABEL_CATALOGUE = 500;
+
 const COLUMNS =
   "id, product_code, barcode, chinese_name, english_name, unit_price, currency, dimensions, packaging, image_url";
 
@@ -129,6 +132,39 @@ export async function getProductByCode(code: string): Promise<Product | null> {
 
   const row = data?.[0];
   return row ? toProduct(row) : null;
+}
+
+/**
+ * Active products for the labels page, optionally filtered by code or name.
+ *
+ * Does not search `barcode`: Koei labels encode `product_code`, and the
+ * catalogue is for printing those codes rather than looking up supplier labels.
+ */
+export async function listActiveProducts(query = ""): Promise<Product[]> {
+  const supabase = getAdminSupabase();
+  const trimmed = query.trim();
+
+  let request = supabase
+    .from("products")
+    .select(COLUMNS)
+    .eq("active", true)
+    .order("product_code", { ascending: true })
+    .limit(MAX_LABEL_CATALOGUE);
+
+  if (trimmed !== "") {
+    const value = escapeFilterValue(trimmed);
+    request = request.or(
+      [
+        `product_code.ilike."%${value}%"`,
+        `english_name.ilike."%${value}%"`,
+        `chinese_name.ilike."%${value}%"`,
+      ].join(","),
+    );
+  }
+
+  const { data, error } = await request.returns<ProductRow[]>();
+  if (error) throw new DatabaseError(error.message);
+  return (data ?? []).map(toProduct);
 }
 
 /** Looks up the products referenced by an inquiry, keyed by id, active only. */

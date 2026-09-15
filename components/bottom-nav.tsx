@@ -16,10 +16,11 @@ export default function BottomNav() {
   const { totals } = useInquiry();
 
   const onInquiry = pathname === "/inquiry";
-  const onSearch = !onInquiry;
+  const onLabels = pathname === "/labels";
+  const onSearch = !onInquiry && !onLabels;
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-porcelain-200 bg-white">
+    <nav className="print-chrome fixed inset-x-0 bottom-0 z-20 border-t border-porcelain-200 bg-white print:hidden">
       <div className="mx-auto flex max-w-md">
         <Link href="/" className={navClasses(onSearch)} aria-current={onSearch ? "page" : undefined}>
           <span aria-hidden>🔍</span>
@@ -37,6 +38,14 @@ export default function BottomNav() {
               {totals.lineCount}
             </span>
           )}
+        </Link>
+        <Link
+          href="/labels"
+          className={navClasses(onLabels)}
+          aria-current={onLabels ? "page" : undefined}
+        >
+          <span aria-hidden>🏷</span>
+          Labels
         </Link>
       </div>
     </nav>

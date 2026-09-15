@@ -19,13 +19,13 @@ export interface ProductResponse {
 export interface InquiryItemRequest {
   productId: string;
   quantity: number;
-  quotedPrice: number | null;
+  /** Required. Zero is allowed; absent, null and negative are not. */
+  quotedPrice: number;
 }
 
 export interface CreateInquiryRequest {
   customerName: string;
   companyName: string;
-  staffName: string;
   notes: string;
   currency: string;
   items: InquiryItemRequest[];
@@ -74,12 +74,10 @@ export function validateCreateInquiry(body: unknown): ValidationResult {
   }
 
   const companyName = readText(body.companyName);
-  const staffName = readText(body.staffName);
   const notes = readText(body.notes);
 
   for (const [label, text] of [
     ["Company name", companyName],
-    ["Staff name", staffName],
     ["Notes", notes],
   ] as const) {
     if (text.length > MAX_TEXT_LENGTH) {
@@ -120,16 +118,18 @@ export function validateCreateInquiry(body: unknown): ValidationResult {
         errors.push(`${position} exceeds the maximum quantity of ${MAX_QUANTITY}.`);
       }
 
+      // A quoted price is mandatory. Zero is accepted as a deliberate choice,
+      // but null, undefined, a blank string and anything non-numeric are not.
       const raw = rawItem.quotedPrice;
-      let quotedPrice: number | null = null;
-      if (raw !== null && raw !== undefined) {
-        if (typeof raw !== "number" || !Number.isFinite(raw)) {
-          errors.push(`${position} has an invalid quoted price.`);
-        } else if (raw < 0) {
-          errors.push(`${position} cannot have a negative quoted price.`);
-        } else {
-          quotedPrice = raw;
-        }
+      let quotedPrice = 0;
+      if (raw === null || raw === undefined || raw === "") {
+        errors.push(`${position} needs a quoted price.`);
+      } else if (typeof raw !== "number" || !Number.isFinite(raw)) {
+        errors.push(`${position} has an invalid quoted price.`);
+      } else if (raw < 0) {
+        errors.push(`${position} cannot have a negative quoted price.`);
+      } else {
+        quotedPrice = raw;
       }
 
       if (errors.length === 0) {
@@ -147,6 +147,6 @@ export function validateCreateInquiry(body: unknown): ValidationResult {
 
   return {
     ok: true,
-    value: { customerName, companyName, staffName, notes, currency, items },
+    value: { customerName, companyName, notes, currency, items },
   };
 }

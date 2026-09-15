@@ -2,11 +2,20 @@
 
 import { useState } from "react";
 import { currencySymbol, formatAmount } from "@/lib/format";
-import { lineTotal, parsePriceInput, sanitizeDecimalInput } from "@/lib/inquiry";
+import {
+  isLinePriced,
+  lineTotal,
+  parsePriceInput,
+  sanitizeDecimalInput,
+} from "@/lib/inquiry";
 import { productTitle, type InquiryLine } from "@/lib/types";
 import { useInquiry } from "./inquiry-store";
 import { PendingBadge } from "./pending";
 import QuantityStepper from "./quantity-stepper";
+
+export const NO_LISTED_PRICE_MESSAGE =
+  "Listed price unavailable — enter a quoted price";
+export const PRICE_REQUIRED_MESSAGE = "Enter a quoted price before saving";
 
 export default function InquiryLineCard({ line }: { line: InquiryLine }) {
   const { setQuantity, setQuotedUnitPrice, removeLine } = useInquiry();
@@ -15,6 +24,15 @@ export default function InquiryLineCard({ line }: { line: InquiryLine }) {
   const { product } = line;
   const storedPrice = line.quotedUnitPrice === null ? "" : String(line.quotedUnitPrice);
   const total = lineTotal(line);
+
+  const priced = isLinePriced(line);
+  // A product with no listed price starts blank, so name that cause explicitly
+  // rather than making it look like the employee deleted something.
+  const priceError = priced
+    ? null
+    : product.unitPrice === null
+      ? NO_LISTED_PRICE_MESSAGE
+      : PRICE_REQUIRED_MESSAGE;
 
   function handlePriceChange(next: string) {
     const sanitized = sanitizeDecimalInput(next);
@@ -55,25 +73,43 @@ export default function InquiryLineCard({ line }: { line: InquiryLine }) {
           />
         </div>
 
-        <div className="flex items-center justify-between gap-3">
-          <label htmlFor={`price-${product.id}`} className="text-sm text-porcelain-600">
-            Quoted unit price
-          </label>
-          <div className="flex items-center gap-1.5">
-            <span className="text-sm text-porcelain-500">
-              {currencySymbol(product.currency)}
-            </span>
-            <input
-              id={`price-${product.id}`}
-              type="text"
-              inputMode="decimal"
-              value={priceDraft ?? storedPrice}
-              onChange={(event) => handlePriceChange(event.target.value)}
-              onBlur={() => setPriceDraft(null)}
-              placeholder="Pending"
-              className="h-11 w-28 rounded-lg border border-porcelain-300 bg-white px-3 text-right text-base font-semibold text-porcelain-950 placeholder:text-sm placeholder:font-normal placeholder:text-porcelain-400 focus:border-porcelain-500 focus:ring-2 focus:ring-porcelain-200 focus:outline-none"
-            />
+        <div>
+          <div className="flex items-center justify-between gap-3">
+            <label htmlFor={`price-${product.id}`} className="text-sm text-porcelain-600">
+              Quoted unit price
+            </label>
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm text-porcelain-500">
+                {currencySymbol(product.currency)}
+              </span>
+              <input
+                id={`price-${product.id}`}
+                type="text"
+                inputMode="decimal"
+                value={priceDraft ?? storedPrice}
+                onChange={(event) => handlePriceChange(event.target.value)}
+                onBlur={() => setPriceDraft(null)}
+                placeholder="Required"
+                aria-invalid={priceError !== null}
+                aria-describedby={priceError ? `price-error-${product.id}` : undefined}
+                className={`h-11 w-28 rounded-lg border bg-white px-3 text-right text-base font-semibold text-porcelain-950 placeholder:text-sm placeholder:font-normal focus:ring-2 focus:outline-none ${
+                  priceError
+                    ? "border-red-400 placeholder:text-red-400 focus:border-red-500 focus:ring-red-200"
+                    : "border-porcelain-300 placeholder:text-porcelain-400 focus:border-porcelain-500 focus:ring-porcelain-200"
+                }`}
+              />
+            </div>
           </div>
+
+          {priceError && (
+            <p
+              id={`price-error-${product.id}`}
+              role="alert"
+              className="mt-1.5 text-right text-xs font-medium text-red-700"
+            >
+              {priceError}
+            </p>
+          )}
         </div>
 
         <div className="flex items-baseline justify-between gap-3 border-t border-porcelain-100 pt-3">

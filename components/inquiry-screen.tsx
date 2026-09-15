@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ApiError, createInquiryRequest } from "@/lib/api-client";
+import { isLinePriced } from "@/lib/inquiry";
 import CustomerForm from "./customer-form";
 import InquiryLineCard from "./inquiry-line-card";
 import { useInquiry } from "./inquiry-store";
@@ -20,21 +21,39 @@ export default function InquiryScreen() {
 
   const saved = save.status === "saved";
   const saving = save.status === "saving";
-  const canSave = lines.length > 0 && customer.name.trim() !== "" && !saving && !saved;
+  const unpricedLines = lines.filter((line) => !isLinePriced(line));
+  const canSave =
+    lines.length > 0 &&
+    customer.name.trim() !== "" &&
+    unpricedLines.length === 0 &&
+    !saving &&
+    !saved;
 
   async function handleSave() {
+    // The button is disabled in this state; this also rejects a save triggered
+    // any other way. The API validates independently regardless.
+    if (unpricedLines.length > 0) {
+      setSave({
+        status: "error",
+        message: "Every product needs a quoted price before saving.",
+        details: unpricedLines.map(
+          (line) => `${line.product.code} has no quoted price.`,
+        ),
+      });
+      return;
+    }
+
     setSave({ status: "saving" });
     try {
       const inquiryId = await createInquiryRequest({
         customerName: customer.name,
         companyName: customer.company,
-        staffName: customer.staffName,
         notes: customer.notes,
         currency,
         items: lines.map((line) => ({
           productId: line.product.id,
           quantity: line.quantity,
-          quotedPrice: line.quotedUnitPrice,
+          quotedPrice: line.quotedUnitPrice as number,
         })),
       });
       setSave({ status: "saved", inquiryId });
@@ -129,6 +148,14 @@ export default function InquiryScreen() {
           {customer.name.trim() === "" && (
             <p className="text-center text-xs text-porcelain-500">
               Enter a customer name to save this inquiry.
+            </p>
+          )}
+
+          {unpricedLines.length > 0 && (
+            <p className="text-center text-xs font-medium text-red-700">
+              {unpricedLines.length === 1
+                ? `${unpricedLines[0].product.code} needs a quoted price before saving.`
+                : `${unpricedLines.length} products need a quoted price before saving.`}
             </p>
           )}
 

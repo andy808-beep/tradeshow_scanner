@@ -6,9 +6,12 @@ export const MAX_QUANTITY = 9999;
 export interface InquiryTotals {
   lineCount: number;
   totalQuantity: number;
-  /** Sum of quantity × quoted price across priced lines only. */
+  /**
+   * Sum of quantity × quoted price. Every line contributes once the inquiry is
+   * submittable, because a line without a price now blocks submission.
+   */
   quotedTotal: number;
-  /** Lines still waiting on a quoted price, excluded from `quotedTotal`. */
+  /** Lines with no quoted price yet. Must be zero before saving. */
   unpricedLineCount: number;
 }
 
@@ -17,8 +20,26 @@ export function clampQuantity(quantity: number): number {
   return Math.min(MAX_QUANTITY, Math.max(MIN_QUANTITY, Math.floor(quantity)));
 }
 
+/**
+ * A quoted price is valid only as a finite, non-negative number. Zero counts,
+ * so a deliberate free-of-charge sample is accepted; `null` does not, because
+ * "no price entered" is not the same decision as "priced at nothing".
+ */
+export function isValidQuotedPrice(value: number | null | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+export function isLinePriced(line: InquiryLine): boolean {
+  return isValidQuotedPrice(line.quotedUnitPrice);
+}
+
+/** True when every line carries a valid price, i.e. the inquiry can be saved. */
+export function allLinesPriced(lines: InquiryLine[]): boolean {
+  return lines.every(isLinePriced);
+}
+
 export function lineTotal(line: InquiryLine): number | null {
-  if (line.quotedUnitPrice === null) return null;
+  if (!isValidQuotedPrice(line.quotedUnitPrice)) return null;
   return line.quantity * line.quotedUnitPrice;
 }
 

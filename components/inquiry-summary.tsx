@@ -35,11 +35,11 @@ export default function InquirySummary() {
       </dl>
 
       {totals.unpricedLineCount > 0 && (
-        <p className="mt-3 text-xs leading-relaxed text-porcelain-600">
+        <p className="mt-3 text-xs leading-relaxed font-medium text-red-700">
           {totals.unpricedLineCount}{" "}
-          {totals.unpricedLineCount === 1 ? "product has" : "products have"} no quoted
-          price yet and {totals.unpricedLineCount === 1 ? "is" : "are"} excluded from this
-          total.
+          {totals.unpricedLineCount === 1 ? "product still needs" : "products still need"}{" "}
+          a quoted price. The total is incomplete until{" "}
+          {totals.unpricedLineCount === 1 ? "it is" : "they are"} priced.
         </p>
       )}
     </section>

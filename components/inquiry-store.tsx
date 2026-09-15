@@ -8,7 +8,6 @@ import type { CustomerDetails, InquiryLine, Product } from "@/lib/types";
 const EMPTY_CUSTOMER: CustomerDetails = {
   name: "",
   company: "",
-  staffName: "",
   notes: "",
 };
 
@@ -50,8 +49,20 @@ export function InquiryProvider({ children }: { children: React.ReactNode }) {
       setLines((current) => {
         const existing = current.find((line) => line.product.id === product.id);
         if (!existing) {
-          return [...current, { product, quantity: 1, quotedUnitPrice: null }];
+          return [
+            ...current,
+            {
+              product,
+              quantity: 1,
+              // Seeded from the listed price, copied as-is to keep every
+              // decimal the database holds. Null stays null so the employee
+              // has to quote it.
+              quotedUnitPrice: product.unitPrice,
+            },
+          ];
         }
+        // Re-adding only bumps the quantity: the price on the line belongs to
+        // the employee from here on and is never re-seeded.
         return current.map((line) =>
           line.product.id === product.id
             ? { ...line, quantity: clampQuantity(line.quantity + 1) }

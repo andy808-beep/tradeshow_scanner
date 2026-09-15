@@ -20,14 +20,18 @@ export interface Product {
 export interface InquiryLine {
   product: Product;
   quantity: number;
-  /** `null` until the rep quotes a price at the booth. */
+  /**
+   * Seeded from `product.unitPrice` when the product is first added, then owned
+   * by the employee. `null` means no price is set yet — either the product has
+   * no listed price or the field was cleared — and the inquiry cannot be saved
+   * in that state.
+   */
   quotedUnitPrice: number | null;
 }
 
 export interface CustomerDetails {
   name: string;
   company: string;
-  staffName: string;
   notes: string;
 }
 

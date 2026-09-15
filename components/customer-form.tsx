@@ -49,24 +49,8 @@ export default function CustomerForm({ disabled }: { disabled?: boolean }) {
           />
         </div>
 
-        <div>
-          <label htmlFor="staff-name" className={labelClasses}>
-            Staff name
-          </label>
-          <input
-            id="staff-name"
-            type="text"
-            value={customer.staffName}
-            onChange={(event) => updateCustomer({ staffName: event.target.value })}
-            placeholder="Who took this inquiry"
-            autoComplete="off"
-            disabled={disabled}
-            className={fieldClasses}
-          />
-        </div>
-
-        <div>
-          <label htmlFor="customer-notes" className={labelClasses}>
+          <div>
+            <label htmlFor="customer-notes" className={labelClasses}>
             Notes
           </label>
           <textarea

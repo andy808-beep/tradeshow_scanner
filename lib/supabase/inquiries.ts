@@ -42,7 +42,10 @@ export async function createInquiry(input: CreateInquiryRequest): Promise<string
   const { data, error } = await supabase.rpc("create_trade_show_inquiry", {
     p_customer_name: input.customerName,
     p_company_name: input.companyName || null,
-    p_staff_name: input.staffName || null,
+    // The application no longer collects a staff name, but the stored function
+    // still takes this parameter. Passing null keeps the existing signature and
+    // the nullable staff_name column working for previously saved inquiries.
+    p_staff_name: null,
     p_notes: input.notes || null,
     p_currency: input.currency,
     p_items: input.items.map((item) => ({

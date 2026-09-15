@@ -12,6 +12,16 @@ import {
   type LabelSelectionItem,
 } from "@/lib/label-layout";
 import {
+  A4_10_LABELS_105x57,
+  clampPdfSettings,
+  DEFAULT_LABEL_PDF_SETTINGS,
+  LABEL_PDF_BOUNDS,
+  LABEL_PDF_FONT_PUBLIC_PATH,
+  LABEL_PDF_PRINT_INSTRUCTIONS,
+  toLabelPdfProduct,
+  type LabelPdfSettings,
+} from "@/lib/label-pdf-template";
+import {
   isSelected,
   selectAllResults,
   setCopies,
@@ -41,7 +51,10 @@ export default function LabelsScreen() {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<LabelSelectionItem<Product>[]>([]);
   const [layout, setLayout] = useState<LabelLayout>(DEFAULT_LABEL_LAYOUT);
+  const [pdfSettings, setPdfSettings] = useState<LabelPdfSettings>(DEFAULT_LABEL_PDF_SETTINGS);
   const [printPreview, setPrintPreview] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState<"production" | "calibration" | null>(null);
+  const [pdfError, setPdfError] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -79,8 +92,52 @@ export default function LabelsScreen() {
     setLayout((current) => clampLayout({ ...current, ...patch }));
   }
 
+  function patchPdf(patch: Partial<LabelPdfSettings>) {
+    setPdfSettings((current) => clampPdfSettings({ ...current, ...patch }));
+  }
+
   function handlePrint() {
     window.print();
+  }
+
+  const pdfProducts = useMemo(
+    () =>
+      printable
+        .filter((product) => isCode39Compatible(product.code))
+        .map(toLabelPdfProduct),
+    [printable],
+  );
+
+  async function exportPdf(mode: "production" | "calibration") {
+    setPdfError(null);
+    setPdfBusy(mode);
+    try {
+      const fontResponse = await fetch(LABEL_PDF_FONT_PUBLIC_PATH);
+      if (!fontResponse.ok) {
+        throw new Error("Could not load the Chinese label font.");
+      }
+      const fontBytes = new Uint8Array(await fontResponse.arrayBuffer());
+      const { generateCalibrationLabelPdf, generateProductionLabelPdf } =
+        await import("@/lib/label-pdf");
+      const result =
+        mode === "calibration"
+          ? await generateCalibrationLabelPdf({ settings: pdfSettings, fontBytes })
+          : await generateProductionLabelPdf({
+              products: pdfProducts,
+              settings: pdfSettings,
+              fontBytes,
+            });
+      downloadPdfBytes(
+        result.bytes,
+        mode === "calibration" ? "koei-label-calibration.pdf" : "koei-labels.pdf",
+      );
+    } catch (error: unknown) {
+      setPdfError(
+        error instanceof Error ? error.message : "The PDF could not be generated.",
+      );
+    } finally {
+      setPdfBusy(null);
+    }
   }
 
   return (
@@ -205,12 +262,109 @@ export default function LabelsScreen() {
           </section>
         )}
 
+        {invalidSelected.length > 0 && (
+          <p className="text-sm font-medium text-red-700">
+            {invalidSelected.length}{" "}
+            {invalidSelected.length === 1 ? "code cannot" : "codes cannot"} be encoded
+            as Code 39 and will not print.
+          </p>
+        )}
+
         <section className="space-y-3 rounded-xl border border-porcelain-200 bg-white p-3">
           <h2 className="text-sm font-semibold tracking-wide text-porcelain-600 uppercase">
-            Label layout
+            PDF export
           </h2>
           <p className="text-xs text-porcelain-500">
-            Defaults are a starting point. Calibrate against Koei&apos;s label paper.
+            Print-ready A4 PDF. Template size is fixed to the sticker sheet;
+            offsets are for printer calibration and have not been measured on the
+            physical product yet.
+          </p>
+          <p className="text-sm font-medium text-porcelain-900">{A4_10_LABELS_105x57.name}</p>
+          <div className="grid grid-cols-2 gap-3">
+            <LayoutField
+              id="pdf-start-at"
+              label="Start at label"
+              value={pdfSettings.startAt}
+              bounds={LABEL_PDF_BOUNDS.startAt}
+              onChange={(startAt) => patchPdf({ startAt })}
+            />
+            <LayoutField
+              id="pdf-offset-x"
+              label="Horizontal offset (mm)"
+              value={pdfSettings.offsetXMm}
+              bounds={LABEL_PDF_BOUNDS.offsetXMm}
+              onChange={(offsetXMm) => patchPdf({ offsetXMm })}
+            />
+            <LayoutField
+              id="pdf-offset-y"
+              label="Vertical offset (mm)"
+              value={pdfSettings.offsetYMm}
+              bounds={LABEL_PDF_BOUNDS.offsetYMm}
+              onChange={(offsetYMm) => patchPdf({ offsetYMm })}
+            />
+            <LayoutField
+              id="pdf-padding"
+              label="Internal padding (mm)"
+              value={pdfSettings.paddingMm}
+              bounds={LABEL_PDF_BOUNDS.paddingMm}
+              onChange={(paddingMm) => patchPdf({ paddingMm })}
+            />
+            <LayoutField
+              id="pdf-barcode-height"
+              label="Barcode height (mm)"
+              value={pdfSettings.barcodeHeightMm}
+              bounds={LABEL_PDF_BOUNDS.barcodeHeightMm}
+              onChange={(barcodeHeightMm) => patchPdf({ barcodeHeightMm })}
+            />
+            <LayoutField
+              id="pdf-module"
+              label="Barcode width (mm)"
+              value={pdfSettings.moduleMm}
+              bounds={LABEL_PDF_BOUNDS.moduleMm}
+              onChange={(moduleMm) => patchPdf({ moduleMm })}
+            />
+          </div>
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+            <h3 className="text-xs font-semibold tracking-wide text-amber-900 uppercase">
+              Print at 100% before download
+            </h3>
+            <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs text-amber-950">
+              {LABEL_PDF_PRINT_INSTRUCTIONS.map((instruction) => (
+                <li key={instruction}>{instruction}</li>
+              ))}
+            </ol>
+          </div>
+          {pdfError && <p className="text-sm font-medium text-red-700">{pdfError}</p>}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                void exportPdf("production");
+              }}
+              disabled={pdfProducts.length === 0 || pdfBusy !== null}
+              className="flex-1 rounded-xl bg-porcelain-600 px-4 py-3 text-sm font-semibold text-white disabled:bg-porcelain-300"
+            >
+              {pdfBusy === "production" ? "Generating PDF…" : "Export PDF"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void exportPdf("calibration");
+              }}
+              disabled={pdfBusy !== null}
+              className="flex-1 rounded-xl border border-porcelain-300 px-4 py-3 text-sm font-semibold text-porcelain-700 disabled:text-porcelain-300"
+            >
+              {pdfBusy === "calibration" ? "Generating…" : "Calibration PDF"}
+            </button>
+          </div>
+        </section>
+
+        <section className="space-y-3 rounded-xl border border-porcelain-200 bg-white p-3">
+          <h2 className="text-sm font-semibold tracking-wide text-porcelain-600 uppercase">
+            Browser print (secondary)
+          </h2>
+          <p className="text-xs text-porcelain-500">
+            On-screen preview and the browser Print dialog. The PDF template stays at 105 × 57 mm.
           </p>
           <div className="grid grid-cols-2 gap-3">
             <LayoutField
@@ -249,37 +403,28 @@ export default function LabelsScreen() {
               onChange={(moduleMm) => patchLayout({ moduleMm })}
             />
           </div>
-        </section>
-
-        {invalidSelected.length > 0 && (
-          <p className="text-sm font-medium text-red-700">
-            {invalidSelected.length}{" "}
-            {invalidSelected.length === 1 ? "code cannot" : "codes cannot"} be encoded
-            as Code 39 and will not print.
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setPrintPreview((value) => !value)}
+              className="flex-1 rounded-xl border border-porcelain-300 px-4 py-3 text-sm font-semibold text-porcelain-700"
+            >
+              Print preview
+            </button>
+            <button
+              type="button"
+              onClick={handlePrint}
+              disabled={printable.length === 0}
+              className="flex-1 rounded-xl border border-porcelain-300 px-4 py-3 text-sm font-semibold text-porcelain-700 disabled:text-porcelain-300"
+            >
+              Print
+            </button>
+          </div>
+          <p className="text-center text-xs text-porcelain-500">
+            {printable.length} {printable.length === 1 ? "label" : "labels"} · layout{" "}
+            {layout.widthMm}×{layout.heightMm} mm
           </p>
-        )}
-
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => setPrintPreview((value) => !value)}
-            className="flex-1 rounded-xl border border-porcelain-300 px-4 py-3 text-sm font-semibold text-porcelain-700"
-          >
-            Print preview
-          </button>
-          <button
-            type="button"
-            onClick={handlePrint}
-            disabled={printable.length === 0}
-            className="flex-1 rounded-xl bg-porcelain-600 px-4 py-3 text-sm font-semibold text-white disabled:bg-porcelain-300"
-          >
-            Print
-          </button>
-        </div>
-        <p className="text-center text-xs text-porcelain-500">
-          {printable.length} {printable.length === 1 ? "label" : "labels"} · layout{" "}
-          {layout.widthMm}×{layout.heightMm} mm
-        </p>
+        </section>
       </div>
 
       {printPreview && (
@@ -337,4 +482,19 @@ function LayoutField({
       />
     </div>
   );
+}
+
+function downloadPdfBytes(bytes: Uint8Array, filename: string) {
+  const copy = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(copy).set(bytes);
+  const blob = new Blob([copy], { type: "application/pdf" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.rel = "noopener";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }

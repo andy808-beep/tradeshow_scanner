@@ -105,6 +105,22 @@ describe("print-only layout", () => {
     expect(screen.getByRole("button", { name: "Print preview" })).toBeVisible();
   });
 
+  it("offers PDF export with the A4 template, calibration and print instructions", async () => {
+    render(<LabelsScreen />);
+    await waitFor(() => expect(screen.getByLabelText("Select K10188-13")).toBeTruthy());
+
+    expect(screen.getByRole("button", { name: "Export PDF" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Calibration PDF" })).toBeEnabled();
+    expect(screen.getByText("A4 — 10 labels — 105 × 57 mm")).toBeVisible();
+    expect(screen.getByLabelText("Start at label")).toBeVisible();
+    expect(screen.getByLabelText("Horizontal offset (mm)")).toBeVisible();
+    expect(screen.getByLabelText("Vertical offset (mm)")).toBeVisible();
+    expect(screen.getByText(/Load the A4 sticker sheet/)).toBeVisible();
+    expect(screen.getByText(/Print at 100% \/ Actual size/)).toBeVisible();
+    expect(screen.getByText(/First print the calibration PDF on ordinary A4 paper/)).toBeVisible();
+    expect(screen.getByText("Browser print (secondary)")).toBeVisible();
+  });
+
   it("keeps labels from splitting across pages and preserves black/white bars", () => {
     const css = readFileSync(
       path.join(process.cwd(), "app", "globals.css"),

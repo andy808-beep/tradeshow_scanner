@@ -1,6 +1,7 @@
 "use client";
 
-import { encodeCode39, isCode39Compatible, totalModules } from "@/lib/code39";
+import { isCode39Compatible } from "@/lib/code39";
+import { code39BarRects } from "@/lib/code39-bars";
 
 export default function Code39Barcode({
   value,
@@ -15,16 +16,7 @@ export default function Code39Barcode({
 }) {
   if (!isCode39Compatible(value)) return null;
 
-  const runs = encodeCode39(value);
-  const modules = totalModules(runs);
-  const width = modules * moduleMm;
-
-  let x = 0;
-  const bars: Array<{ x: number; width: number }> = [];
-  for (const run of runs) {
-    if (run.black) bars.push({ x, width: run.modules * moduleMm });
-    x += run.modules * moduleMm;
-  }
+  const { widthMm: width, bars } = code39BarRects(value, moduleMm);
 
   return (
     <svg

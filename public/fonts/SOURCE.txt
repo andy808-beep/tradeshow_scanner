@@ -1,0 +1,10 @@
+Noto Sans SC 400 (chinese-simplified subset)
+
+File: NotoSansSC-Regular.ttf
+Source: https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-sc@5.2.8/chinese-simplified-400-normal.ttf
+Upstream: Google Fonts / Fontsource distribution of Noto Sans SC
+         (based on Source Han Sans by Adobe)
+
+License: SIL Open Font License 1.1 — see OFL.txt
+The font is subset-embedded into each generated PDF at export time.
+It is not uploaded to Supabase.

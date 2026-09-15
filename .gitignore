@@ -40,3 +40,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Supplier spreadsheets and generated import reports. Both contain commercial
+# pricing and are reproducible from the source workbooks, so neither belongs in
+# the repository. The importer itself is committed; its inputs and outputs are not.
+/data/import/
+/data/import-reports/
+*.xls
+*.xlsx

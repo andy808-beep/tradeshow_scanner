@@ -1,26 +1,30 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --color-porcelain-50: #f3f7fb;
+  --color-porcelain-100: #e4eef7;
+  --color-porcelain-200: #c6dcee;
+  --color-porcelain-300: #99c1de;
+  --color-porcelain-400: #649fc8;
+  --color-porcelain-500: #3f80ae;
+  --color-porcelain-600: #2f6693;
+  --color-porcelain-700: #285377;
+  --color-porcelain-800: #254663;
+  --color-porcelain-900: #223b53;
+  --color-porcelain-950: #16273a;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  /* Keep type size stable when the device rotates at the booth. */
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-porcelain-100);
+  color: var(--color-porcelain-950);
 }

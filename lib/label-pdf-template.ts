@@ -1,9 +1,9 @@
 /**
- * Physical A4 sticker layout. Gaps and the 6 mm top margin are initial
+ * Physical A4 sticker layout. Gaps and the 0.45 mm top margin are initial
  * assumptions — the sheet has not been printer-calibrated yet.
  *
- * Five 57 mm rows leave 12 mm of A4 height (297 − 285), so ~6 mm sits at the
- * top and bottom when offsets are zero.
+ * Seven 42.3 mm rows use 296.1 mm of A4 height (297 − 296.1 = 0.9 mm), so
+ * ~0.45 mm sits at the top and bottom when offsets are zero.
  */
 
 export const PDF_POINTS_PER_INCH = 72;
@@ -33,24 +33,24 @@ export interface LabelPdfTemplate {
   topMarginMm: number;
 }
 
-export const A4_10_LABELS_105x57: LabelPdfTemplate = {
-  id: "a4-10-105x57",
-  name: "A4 — 10 labels — 105 × 57 mm",
+export const A4_21_LABELS_70x42: LabelPdfTemplate = {
+  id: "a4-21-70x42",
+  name: "A4 — 21 labels — 70 × 42.3 mm",
   pageWidthMm: 210,
   pageHeightMm: 297,
-  columns: 2,
-  rows: 5,
-  labelWidthMm: 105,
-  labelHeightMm: 57,
+  columns: 3,
+  rows: 7,
+  labelWidthMm: 70,
+  labelHeightMm: 42.3,
   columnGapMm: 0,
   rowGapMm: 0,
   leftMarginMm: 0,
-  topMarginMm: 6,
+  topMarginMm: 0.45,
 };
 
-export const LABEL_PDF_TEMPLATES = [A4_10_LABELS_105x57] as const;
+export const LABEL_PDF_TEMPLATE = A4_21_LABELS_70x42;
 
-export function labelsPerPage(template: LabelPdfTemplate = A4_10_LABELS_105x57): number {
+export function labelsPerPage(template: LabelPdfTemplate = A4_21_LABELS_70x42): number {
   return template.columns * template.rows;
 }
 
@@ -83,7 +83,7 @@ export const LABEL_PDF_BOUNDS = {
   paddingMm: { min: 1.5, max: 8, step: 0.5 },
   barcodeHeightMm: { min: 8, max: 28, step: 0.5 },
   moduleMm: { min: 0.15, max: 0.5, step: 0.05 },
-  startAt: { min: 1, max: 10, step: 1 },
+  startAt: { min: 1, max: 21, step: 1 },
 } as const;
 
 function clamp(value: number, min: number, max: number): number {
@@ -117,11 +117,11 @@ export interface LabelRectMm {
   heightMm: number;
 }
 
-/** 1-based position on a 2×5 sheet. */
+/** 1-based position on a 3×7 sheet. */
 export function labelRectMm(
   position: number,
   settings: Pick<LabelPdfSettings, "offsetXMm" | "offsetYMm">,
-  template: LabelPdfTemplate = A4_10_LABELS_105x57,
+  template: LabelPdfTemplate = A4_21_LABELS_70x42,
 ): LabelRectMm {
   const index = position - 1;
   const col = index % template.columns;
@@ -174,7 +174,7 @@ export interface LabelPageSlot<T> {
 export function paginateLabelSlots<T>(
   products: T[],
   startAt: number,
-  template: LabelPdfTemplate = A4_10_LABELS_105x57,
+  template: LabelPdfTemplate = A4_21_LABELS_70x42,
 ): LabelPageSlot<T>[][] {
   const perPage = labelsPerPage(template);
   const origin = clamp(Math.round(startAt), 1, perPage);

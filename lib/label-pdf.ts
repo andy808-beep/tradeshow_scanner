@@ -13,7 +13,7 @@ import {
 import { isCode39Compatible } from "./code39";
 import { code39BarRects, fitCode39ModuleMm } from "./code39-bars";
 import {
-  A4_10_LABELS_105x57,
+  A4_21_LABELS_70x42,
   CALIBRATION_PDF_SUBJECT,
   CALIBRATION_TEST_CODE,
   clampPdfSettings,
@@ -361,7 +361,7 @@ export async function generateProductionLabelPdf({
   products,
   settings: rawSettings,
   fontBytes,
-  template = A4_10_LABELS_105x57,
+  template = A4_21_LABELS_70x42,
 }: GenerateLabelPdfOptions): Promise<LabelPdfResult> {
   const settings = clampPdfSettings(rawSettings);
   const pages = paginateLabelSlots(products, settings.startAt, template);
@@ -419,7 +419,7 @@ export async function generateProductionLabelPdf({
 export async function generateCalibrationLabelPdf({
   settings: rawSettings,
   fontBytes,
-  template = A4_10_LABELS_105x57,
+  template = A4_21_LABELS_70x42,
 }: Omit<GenerateLabelPdfOptions, "products">): Promise<LabelPdfResult> {
   const settings = clampPdfSettings(rawSettings);
   const { pdf, font } = await createDocument(

@@ -12,7 +12,7 @@ import {
   type LabelSelectionItem,
 } from "@/lib/label-layout";
 import {
-  A4_10_LABELS_105x57,
+  A4_21_LABELS_70x42,
   clampPdfSettings,
   DEFAULT_LABEL_PDF_SETTINGS,
   LABEL_PDF_BOUNDS,
@@ -279,7 +279,7 @@ export default function LabelsScreen() {
             offsets are for printer calibration and have not been measured on the
             physical product yet.
           </p>
-          <p className="text-sm font-medium text-porcelain-900">{A4_10_LABELS_105x57.name}</p>
+          <p className="text-sm font-medium text-porcelain-900">{A4_21_LABELS_70x42.name}</p>
           <div className="grid grid-cols-2 gap-3">
             <LayoutField
               id="pdf-start-at"
@@ -364,7 +364,7 @@ export default function LabelsScreen() {
             Browser print (secondary)
           </h2>
           <p className="text-xs text-porcelain-500">
-            On-screen preview and the browser Print dialog. The PDF template stays at 105 × 57 mm.
+            On-screen preview and the browser Print dialog. The PDF template stays at 70 × 42.3 mm.
           </p>
           <div className="grid grid-cols-2 gap-3">
             <LayoutField

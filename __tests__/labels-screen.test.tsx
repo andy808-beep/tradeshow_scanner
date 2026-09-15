@@ -111,7 +111,11 @@ describe("print-only layout", () => {
 
     expect(screen.getByRole("button", { name: "Export PDF" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Calibration PDF" })).toBeEnabled();
-    expect(screen.getByText("A4 — 10 labels — 105 × 57 mm")).toBeVisible();
+    expect(screen.getByText("A4 — 21 labels — 70 × 42.3 mm")).toBeVisible();
+    expect(screen.queryByText("A4 — 10 labels — 105 × 57 mm")).toBeNull();
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.getByLabelText("Start at label")).toHaveAttribute("max", "21");
+    expect(screen.getByLabelText("Start at label")).toHaveAttribute("min", "1");
     expect(screen.getByLabelText("Start at label")).toBeVisible();
     expect(screen.getByLabelText("Horizontal offset (mm)")).toBeVisible();
     expect(screen.getByLabelText("Vertical offset (mm)")).toBeVisible();

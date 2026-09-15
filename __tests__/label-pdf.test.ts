@@ -12,7 +12,7 @@ import {
   type LabelSlotReport,
 } from "@/lib/label-pdf";
 import {
-  A4_10_LABELS_105x57,
+  A4_21_LABELS_70x42,
   CALIBRATION_PDF_SUBJECT,
   CALIBRATION_TEST_CODE,
   clampPdfSettings,
@@ -87,33 +87,38 @@ function assertInsideLabel(slot: LabelSlotReport) {
 describe("millimetre to PDF point conversion", () => {
   it("maps 25.4 mm to 72 points and A4 to exact 210 × 297 mm", () => {
     expect(mmToPt(25.4)).toBe(72);
-    expect(mmToPt(A4_10_LABELS_105x57.pageWidthMm)).toBe((210 * 72) / 25.4);
-    expect(mmToPt(A4_10_LABELS_105x57.pageHeightMm)).toBe((297 * 72) / 25.4);
+    expect(mmToPt(A4_21_LABELS_70x42.pageWidthMm)).toBe((210 * 72) / 25.4);
+    expect(mmToPt(A4_21_LABELS_70x42.pageHeightMm)).toBe((297 * 72) / 25.4);
   });
 });
 
-describe("A4 10-up template", () => {
-  it("is 2×5 of 105 × 57 mm with a 6 mm top margin", () => {
-    expect(A4_10_LABELS_105x57.name).toBe("A4 — 10 labels — 105 × 57 mm");
-    expect(A4_10_LABELS_105x57.columns).toBe(2);
-    expect(A4_10_LABELS_105x57.rows).toBe(5);
-    expect(A4_10_LABELS_105x57.labelWidthMm).toBe(105);
-    expect(A4_10_LABELS_105x57.labelHeightMm).toBe(57);
-    expect(A4_10_LABELS_105x57.topMarginMm).toBe(6);
-    expect(A4_10_LABELS_105x57.leftMarginMm).toBe(0);
-    expect(A4_10_LABELS_105x57.columnGapMm).toBe(0);
-    expect(A4_10_LABELS_105x57.rowGapMm).toBe(0);
+describe("A4 21-up template", () => {
+  it("is 3×7 of 70 × 42.3 mm with a 0.45 mm top margin", () => {
+    expect(A4_21_LABELS_70x42.name).toBe("A4 — 21 labels — 70 × 42.3 mm");
+    expect(A4_21_LABELS_70x42.columns).toBe(3);
+    expect(A4_21_LABELS_70x42.rows).toBe(7);
+    expect(A4_21_LABELS_70x42.labelWidthMm).toBe(70);
+    expect(A4_21_LABELS_70x42.labelHeightMm).toBeCloseTo(42.3);
+    expect(A4_21_LABELS_70x42.topMarginMm).toBeCloseTo(0.45);
+    expect(A4_21_LABELS_70x42.leftMarginMm).toBe(0);
+    expect(A4_21_LABELS_70x42.columnGapMm).toBe(0);
+    expect(A4_21_LABELS_70x42.rowGapMm).toBe(0);
+    expect(7 * 42.3).toBeCloseTo(296.1);
+    expect(297 - 7 * 42.3).toBeCloseTo(0.9);
 
     const first = labelRectMm(1, DEFAULT_LABEL_PDF_SETTINGS);
-    expect(first).toEqual({ xMm: 0, yMmFromTop: 6, widthMm: 105, heightMm: 57 });
-    expect(labelRectMm(2, DEFAULT_LABEL_PDF_SETTINGS).xMm).toBe(105);
-    expect(labelRectMm(3, DEFAULT_LABEL_PDF_SETTINGS).yMmFromTop).toBe(63);
-    expect(labelRectMm(10, DEFAULT_LABEL_PDF_SETTINGS)).toEqual({
-      xMm: 105,
-      yMmFromTop: 234,
-      widthMm: 105,
-      heightMm: 57,
-    });
+    expect(first.xMm).toBe(0);
+    expect(first.yMmFromTop).toBeCloseTo(0.45);
+    expect(first.widthMm).toBe(70);
+    expect(first.heightMm).toBeCloseTo(42.3);
+    expect(labelRectMm(2, DEFAULT_LABEL_PDF_SETTINGS).xMm).toBe(70);
+    expect(labelRectMm(3, DEFAULT_LABEL_PDF_SETTINGS).xMm).toBe(140);
+    expect(labelRectMm(4, DEFAULT_LABEL_PDF_SETTINGS).yMmFromTop).toBeCloseTo(0.45 + 42.3);
+    const last = labelRectMm(21, DEFAULT_LABEL_PDF_SETTINGS);
+    expect(last.xMm).toBe(140);
+    expect(last.yMmFromTop).toBeCloseTo(0.45 + 6 * 42.3);
+    expect(last.widthMm).toBe(70);
+    expect(last.heightMm).toBeCloseTo(42.3);
   });
 
   it("allows negative and positive page offsets within the safe range", () => {
@@ -127,7 +132,7 @@ describe("A4 10-up template", () => {
     });
     expect(clamped.offsetXMm).toBe(-10);
     expect(clamped.offsetYMm).toBe(10);
-    expect(clamped.startAt).toBe(10);
+    expect(clamped.startAt).toBe(21);
     expect(clamped.paddingMm).toBe(1.5);
   });
 });
@@ -136,61 +141,32 @@ describe("pagination and start-at", () => {
   it("fills left to right, then top to bottom, repeating copies", () => {
     const pages = paginateLabelSlots(["A", "A", "B"], 1);
     expect(pages).toHaveLength(1);
-    expect(pages[0].map((slot) => slot.product)).toEqual([
-      "A",
-      "A",
-      "B",
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-    ]);
+    expect(pages[0]).toHaveLength(21);
+    expect(pages[0].slice(0, 3).map((slot) => slot.product)).toEqual(["A", "A", "B"]);
+    expect(pages[0].slice(3).every((slot) => slot.product === null)).toBe(true);
   });
 
   it("leaves positions before Start at label blank on the first page", () => {
-    const pages = paginateLabelSlots(["P", "Q", "R", "S", "T"], 8);
+    const pages = paginateLabelSlots(["P", "Q", "R", "S", "T"], 19);
     expect(pages).toHaveLength(2);
-    expect(pages[0].slice(0, 7).every((slot) => slot.product === null)).toBe(true);
-    expect(pages[0].map((slot) => slot.product)).toEqual([
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      "P",
-      "Q",
-      "R",
-    ]);
-    expect(pages[1].map((slot) => slot.product)).toEqual([
-      "S",
-      "T",
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-    ]);
+    expect(pages[0].slice(0, 18).every((slot) => slot.product === null)).toBe(true);
+    expect(pages[0].slice(18).map((slot) => slot.product)).toEqual(["P", "Q", "R"]);
+    expect(pages[1].map((slot) => slot.product).slice(0, 2)).toEqual(["S", "T"]);
+    expect(pages[1].slice(2).every((slot) => slot.product === null)).toBe(true);
+    expect(pages[1]).toHaveLength(21);
   });
 
-  it("paginates past 10 labels onto a second page", () => {
-    const products = Array.from({ length: 12 }, (_, index) => `N${index}`);
+  it("paginates past 21 labels onto a second page", () => {
+    const products = Array.from({ length: 25 }, (_, index) => `N${index}`);
     const pages = paginateLabelSlots(products, 1);
     expect(pages).toHaveLength(2);
-    expect(pages[0].filter((slot) => slot.product)).toHaveLength(10);
-    expect(pages[1].filter((slot) => slot.product)).toHaveLength(2);
+    expect(pages[0].filter((slot) => slot.product)).toHaveLength(21);
+    expect(pages[1].filter((slot) => slot.product)).toHaveLength(4);
   });
 });
 
 describe("production PDF", () => {
-  it("uses A4 210 × 297 mm pages and 105 × 57 mm label slots", async () => {
+  it("uses A4 210 × 297 mm pages and 70 × 42.3 mm label slots", async () => {
     const product = toLabelPdfProduct(K10188);
     const { bytes, plan } = await generateProductionLabelPdf({
       products: [product],
@@ -202,7 +178,7 @@ describe("production PDF", () => {
     expect(plan.pageHeightMm).toBe(297);
     expect(plan.pageCount).toBe(1);
     expect(plan.calibrationMarks).toBe(false);
-    expect(plan.templateName).toBe("A4 — 10 labels — 105 × 57 mm");
+    expect(plan.templateName).toBe("A4 — 21 labels — 70 × 42.3 mm");
 
     const pdf = await PDFDocument.load(bytes);
     expect(pdf.getPageCount()).toBe(1);
@@ -212,12 +188,10 @@ describe("production PDF", () => {
     expect(size.height).toBe(mmToPt(297));
 
     const filled = plan.slots.find((slot) => slot.productCode === "K10188-13");
-    expect(filled?.rect).toEqual({
-      xMm: 0,
-      yMmFromTop: 6,
-      widthMm: 105,
-      heightMm: 57,
-    });
+    expect(filled?.rect.xMm).toBe(0);
+    expect(filled?.rect.yMmFromTop).toBeCloseTo(0.45);
+    expect(filled?.rect.widthMm).toBe(70);
+    expect(filled?.rect.heightMm).toBeCloseTo(42.3);
   });
 
   it("respects copy counts and Start at label across pages", async () => {
@@ -225,16 +199,17 @@ describe("production PDF", () => {
     const copies = Array.from({ length: 5 }, () => product);
     const { plan } = await generateProductionLabelPdf({
       products: copies,
-      settings: { ...DEFAULT_LABEL_PDF_SETTINGS, startAt: 8 },
+      settings: { ...DEFAULT_LABEL_PDF_SETTINGS, startAt: 19 },
       fontBytes: FONT_BYTES,
     });
 
     expect(plan.pageCount).toBe(2);
     const firstPage = plan.slots.filter((slot) => slot.pageIndex === 0);
-    expect(firstPage.slice(0, 7).every((slot) => slot.productCode === null)).toBe(
+    expect(firstPage).toHaveLength(21);
+    expect(firstPage.slice(0, 18).every((slot) => slot.productCode === null)).toBe(
       true,
     );
-    expect(firstPage.slice(7).map((slot) => slot.productCode)).toEqual([
+    expect(firstPage.slice(18).map((slot) => slot.productCode)).toEqual([
       "K10188-13",
       "K10188-13",
       "K10188-13",
@@ -285,7 +260,7 @@ describe("production PDF", () => {
     expect(plan.markTexts).toEqual([]);
   });
 
-  it("keeps barcode bars and text inside each 105 × 57 mm label", async () => {
+  it("keeps barcode bars and text inside each 70 × 42.3 mm label", async () => {
     const products: LabelPdfProduct[] = [
       toLabelPdfProduct(K10188),
       {
@@ -305,7 +280,7 @@ describe("production PDF", () => {
 });
 
 describe("calibration PDF", () => {
-  it("is one A4 page with 10 numbered outlines, rulers and a K10188-13 barcode", async () => {
+  it("is one A4 page with 21 numbered outlines, rulers and a K10188-13 barcode", async () => {
     const { bytes, plan } = await generateCalibrationLabelPdf({
       settings: DEFAULT_LABEL_PDF_SETTINGS,
       fontBytes: FONT_BYTES,
@@ -313,8 +288,10 @@ describe("calibration PDF", () => {
 
     expect(plan.pageCount).toBe(1);
     expect(plan.calibrationMarks).toBe(true);
-    expect(plan.slots).toHaveLength(10);
-    expect(plan.slots.map((slot) => slot.position)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(plan.slots).toHaveLength(21);
+    expect(plan.slots.map((slot) => slot.position)).toEqual(
+      Array.from({ length: 21 }, (_, index) => index + 1),
+    );
     expect(plan.slots[0].productCode).toBe(CALIBRATION_TEST_CODE);
 
     const pdf = await PDFDocument.load(bytes);

@@ -41,7 +41,7 @@ function request(overrides: Partial<CreateInquiryRequest> = {}): CreateInquiryRe
     companyName: "Koei",
     notes: "",
     currency: "USD",
-    items: [{ productId: PRODUCT_ID, quantity: 2, quotedPrice: 2.4 }],
+    items: [{ productId: PRODUCT_ID, quotedPrice: 2.4 }],
     ...overrides,
   };
 }
@@ -87,17 +87,24 @@ describe("createInquiry", () => {
     expect(params.p_notes).toBe("Ships in May");
     expect(params.p_currency).toBe("USD");
     expect(params.p_items).toEqual([
-      { productId: PRODUCT_ID, quantity: 2, quotedPrice: 2.4 },
+      { productId: PRODUCT_ID, quantity: 1, quotedPrice: 2.4 },
     ]);
   });
 
   it("sends a quoted price of zero through unchanged", async () => {
     await createInquiry(
-      request({ items: [{ productId: PRODUCT_ID, quantity: 1, quotedPrice: 0 }] }),
+      request({ items: [{ productId: PRODUCT_ID, quotedPrice: 0 }] }),
     );
     const [, params] = mocks.rpc.mock.calls[0];
 
     expect(params.p_items[0].quotedPrice).toBe(0);
+  });
+
+  it("always supplies quantity = 1 to the existing RPC", async () => {
+    await createInquiry(request());
+    const [, params] = mocks.rpc.mock.calls[0];
+    expect(params.p_items[0].quantity).toBe(1);
+    expect(request().items[0]).not.toHaveProperty("quantity");
   });
 
   it("returns the new inquiry id", async () => {

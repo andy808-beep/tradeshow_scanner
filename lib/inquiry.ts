@@ -1,23 +1,11 @@
-import type { InquiryLine } from "./types";
+import type { CustomerDetails, InquiryLine } from "./types";
 
-export const MIN_QUANTITY = 1;
-export const MAX_QUANTITY = 9999;
-
-export interface InquiryTotals {
-  lineCount: number;
-  totalQuantity: number;
-  /**
-   * Sum of quantity × quoted price. Every line contributes once the inquiry is
-   * submittable, because a line without a price now blocks submission.
-   */
-  quotedTotal: number;
+export interface InquirySummary {
+  /** Distinct products on the inquiry, not ordered quantities. */
+  productCount: number;
   /** Lines with no quoted price yet. Must be zero before saving. */
-  unpricedLineCount: number;
-}
-
-export function clampQuantity(quantity: number): number {
-  if (!Number.isFinite(quantity)) return MIN_QUANTITY;
-  return Math.min(MAX_QUANTITY, Math.max(MIN_QUANTITY, Math.floor(quantity)));
+  unpricedCount: number;
+  allPriced: boolean;
 }
 
 /**
@@ -38,24 +26,25 @@ export function allLinesPriced(lines: InquiryLine[]): boolean {
   return lines.every(isLinePriced);
 }
 
-export function lineTotal(line: InquiryLine): number | null {
-  if (!isValidQuotedPrice(line.quotedUnitPrice)) return null;
-  return line.quantity * line.quotedUnitPrice;
+export function summarizeInquiry(lines: InquiryLine[]): InquirySummary {
+  const unpricedCount = lines.filter((line) => !isLinePriced(line)).length;
+  return {
+    productCount: lines.length,
+    unpricedCount,
+    allPriced: unpricedCount === 0,
+  };
 }
 
-export function calculateTotals(lines: InquiryLine[]): InquiryTotals {
-  return lines.reduce<InquiryTotals>(
-    (totals, line) => {
-      const total = lineTotal(line);
-      return {
-        lineCount: totals.lineCount + 1,
-        totalQuantity: totals.totalQuantity + line.quantity,
-        quotedTotal: totals.quotedTotal + (total ?? 0),
-        unpricedLineCount: totals.unpricedLineCount + (total === null ? 1 : 0),
-      };
-    },
-    { lineCount: 0, totalQuantity: 0, quotedTotal: 0, unpricedLineCount: 0 },
-  );
+export function selectedProductsLabel(productCount: number): string {
+  return productCount === 1 ? "1 product selected" : `${productCount} products selected`;
+}
+
+export function recordedProductsLabel(productCount: number): string {
+  return productCount === 1 ? "1 product recorded" : `${productCount} products recorded`;
+}
+
+export function canSubmitInquiry(lines: InquiryLine[], customer: CustomerDetails): boolean {
+  return customer.name.trim() !== "" && lines.length > 0 && allLinesPriced(lines);
 }
 
 /** Keeps a price field to digits and a single decimal point while typing. */

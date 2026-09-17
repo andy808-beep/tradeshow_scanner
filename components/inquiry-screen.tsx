@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useRef, useState } from "react";
 import { ApiError, createInquiryRequest } from "@/lib/api-client";
-import { isLinePriced } from "@/lib/inquiry";
+import { canSubmitInquiry, isLinePriced, recordedProductsLabel } from "@/lib/inquiry";
 import CustomerForm from "./customer-form";
 import InquiryLineCard from "./inquiry-line-card";
 import { useInquiry } from "./inquiry-store";
@@ -13,26 +14,28 @@ import OnlineOnlyNotice from "./online-only-notice";
 type SaveState =
   | { status: "idle" }
   | { status: "saving" }
-  | { status: "error"; message: string; details: string[] }
-  | { status: "saved"; inquiryId: string };
+  | { status: "error"; message: string; details: string[] };
 
 export default function InquiryScreen() {
-  const { lines, customer, currency, clearInquiry } = useInquiry();
+  const router = useRouter();
+  const {
+    lines,
+    customer,
+    currency,
+    confirmation,
+    clearInquiry,
+    markSubmitted,
+  } = useInquiry();
   const [save, setSave] = useState<SaveState>({ status: "idle" });
+  const inFlight = useRef(false);
 
-  const saved = save.status === "saved";
   const saving = save.status === "saving";
   const unpricedLines = lines.filter((line) => !isLinePriced(line));
-  const canSave =
-    lines.length > 0 &&
-    customer.name.trim() !== "" &&
-    unpricedLines.length === 0 &&
-    !saving &&
-    !saved;
+  const canSave = canSubmitInquiry(lines, customer) && !saving && !confirmation;
 
   async function handleSave() {
-    // The button is disabled in this state; this also rejects a save triggered
-    // any other way. The API validates independently regardless.
+    if (inFlight.current || confirmation || saving) return;
+
     if (unpricedLines.length > 0) {
       setSave({
         status: "error",
@@ -44,6 +47,7 @@ export default function InquiryScreen() {
       return;
     }
 
+    inFlight.current = true;
     setSave({ status: "saving" });
     try {
       const inquiryId = await createInquiryRequest({
@@ -53,12 +57,13 @@ export default function InquiryScreen() {
         currency,
         items: lines.map((line) => ({
           productId: line.product.id,
-          quantity: line.quantity,
           quotedPrice: line.quotedUnitPrice as number,
         })),
       });
-      setSave({ status: "saved", inquiryId });
+      markSubmitted(inquiryId);
+      setSave({ status: "idle" });
     } catch (error) {
+      inFlight.current = false;
       // The inquiry is deliberately left intact so nothing typed at the booth
       // is lost when saving fails.
       setSave({
@@ -69,12 +74,55 @@ export default function InquiryScreen() {
     }
   }
 
-  function startNewInquiry() {
+  function startNextInquiry() {
+    inFlight.current = false;
     clearInquiry();
     setSave({ status: "idle" });
+    router.replace("/");
   }
 
-  if (lines.length === 0 && !saved) {
+  if (confirmation) {
+    return (
+      <div className="space-y-4">
+        <section className="rounded-xl border border-emerald-300 bg-emerald-50 p-4">
+          <p className="text-lg font-semibold text-emerald-950">Inquiry saved</p>
+          <dl className="mt-3 space-y-2 text-sm">
+            <div>
+              <dt className="text-xs text-emerald-800">Customer</dt>
+              <dd className="font-medium text-emerald-950">{confirmation.customerName}</dd>
+            </div>
+            {confirmation.companyName !== "" && (
+              <div>
+                <dt className="text-xs text-emerald-800">Company</dt>
+                <dd className="font-medium text-emerald-950">{confirmation.companyName}</dd>
+              </div>
+            )}
+            <div>
+              <dt className="text-xs text-emerald-800">Products</dt>
+              <dd className="font-medium text-emerald-950">
+                {recordedProductsLabel(confirmation.productCount)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-emerald-800">Inquiry ID</dt>
+              <dd className="font-mono text-sm break-all text-emerald-950">
+                {confirmation.inquiryId}
+              </dd>
+            </div>
+          </dl>
+          <button
+            type="button"
+            onClick={startNextInquiry}
+            className="mt-4 w-full rounded-xl bg-emerald-700 px-4 py-3 text-sm font-semibold text-white"
+          >
+            Start next inquiry
+          </button>
+        </section>
+      </div>
+    );
+  }
+
+  if (lines.length === 0) {
     return (
       <div className="space-y-4 py-10 text-center">
         <h1 className="text-lg font-semibold text-porcelain-950">No products yet</h1>
@@ -85,7 +133,7 @@ export default function InquiryScreen() {
           href="/"
           className="inline-block rounded-xl bg-porcelain-600 px-4 py-3 text-sm font-semibold text-white"
         >
-          Go to search
+          Scan another product
         </Link>
       </div>
     );
@@ -99,21 +147,6 @@ export default function InquiryScreen() {
         offline submission is not available yet.
       </OnlineOnlyNotice>
 
-      {saved && (
-        <section className="rounded-xl border border-emerald-300 bg-emerald-50 p-4">
-          <p className="text-sm font-semibold text-emerald-900">Inquiry saved</p>
-          <p className="mt-1 text-xs text-emerald-800">Inquiry ID</p>
-          <p className="font-mono text-sm break-all text-emerald-950">{save.inquiryId}</p>
-          <button
-            type="button"
-            onClick={startNewInquiry}
-            className="mt-3 w-full rounded-xl bg-emerald-700 px-4 py-3 text-sm font-semibold text-white"
-          >
-            Start new inquiry
-          </button>
-        </section>
-      )}
-
       <ul className="space-y-3">
         {lines.map((line) => (
           <li key={line.product.id}>
@@ -122,7 +155,7 @@ export default function InquiryScreen() {
         ))}
       </ul>
 
-      <CustomerForm disabled={saving || saved} />
+      <CustomerForm disabled={saving} />
       <InquirySummary />
 
       {save.status === "error" && (
@@ -139,40 +172,36 @@ export default function InquiryScreen() {
         </div>
       )}
 
-      {!saved && (
-        <>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={!canSave}
-            className="w-full rounded-xl bg-porcelain-600 px-4 py-3.5 text-base font-semibold text-white shadow-sm disabled:bg-porcelain-300"
-          >
-            {saving ? "Saving…" : "Save inquiry"}
-          </button>
+      <Link
+        href="/"
+        className="block w-full rounded-xl border border-porcelain-300 px-4 py-3 text-center text-sm font-semibold text-porcelain-700"
+      >
+        Scan another product
+      </Link>
 
-          {customer.name.trim() === "" && (
-            <p className="text-center text-xs text-porcelain-500">
-              Enter a customer name to save this inquiry.
-            </p>
-          )}
+      <button
+        type="button"
+        onClick={() => {
+          void handleSave();
+        }}
+        disabled={!canSave}
+        className="w-full rounded-xl bg-porcelain-600 px-4 py-3.5 text-base font-semibold text-white shadow-sm disabled:bg-porcelain-300"
+      >
+        {saving ? "Saving…" : "Save inquiry"}
+      </button>
 
-          {unpricedLines.length > 0 && (
-            <p className="text-center text-xs font-medium text-red-700">
-              {unpricedLines.length === 1
-                ? `${unpricedLines[0].product.code} needs a quoted price before saving.`
-                : `${unpricedLines.length} products need a quoted price before saving.`}
-            </p>
-          )}
+      {customer.name.trim() === "" && (
+        <p className="text-center text-xs text-porcelain-500">
+          Enter a customer name to save this inquiry.
+        </p>
+      )}
 
-          <button
-            type="button"
-            onClick={clearInquiry}
-            disabled={saving}
-            className="w-full rounded-xl border border-porcelain-300 px-4 py-3 text-sm font-semibold text-porcelain-600"
-          >
-            Clear inquiry
-          </button>
-        </>
+      {unpricedLines.length > 0 && (
+        <p className="text-center text-xs font-medium text-red-700">
+          {unpricedLines.length === 1
+            ? `${unpricedLines[0].product.code} needs a quoted price before saving.`
+            : `${unpricedLines.length} products need a quoted price before saving.`}
+        </p>
       )}
     </div>
   );

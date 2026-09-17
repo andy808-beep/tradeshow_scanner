@@ -1,45 +1,29 @@
 "use client";
 
-import { currencySymbol, formatAmount } from "@/lib/format";
+import { selectedProductsLabel } from "@/lib/inquiry";
 import { useInquiry } from "./inquiry-store";
 
 export default function InquirySummary() {
-  const { totals, currency } = useInquiry();
+  const { summary, currency } = useInquiry();
 
   return (
     <section className="rounded-xl border border-porcelain-300 bg-porcelain-50 p-4">
-      <h2 className="mb-3 text-sm font-semibold tracking-wide text-porcelain-600 uppercase">
-        Inquiry total
-      </h2>
+      <p className="text-base font-semibold text-porcelain-950">
+        {selectedProductsLabel(summary.productCount)}
+      </p>
+      <p className="mt-1 text-sm text-porcelain-600">Currency {currency}</p>
 
-      <dl className="space-y-2 text-sm">
-        <div className="flex justify-between">
-          <dt className="text-porcelain-600">Products</dt>
-          <dd className="font-medium text-porcelain-950">{totals.lineCount}</dd>
-        </div>
-        <div className="flex justify-between">
-          <dt className="text-porcelain-600">Total quantity</dt>
-          <dd className="font-medium text-porcelain-950">{totals.totalQuantity}</dd>
-        </div>
-        <div className="flex justify-between">
-          <dt className="text-porcelain-600">Currency</dt>
-          <dd className="font-medium text-porcelain-950">{currency}</dd>
-        </div>
-        <div className="flex items-baseline justify-between border-t border-porcelain-300 pt-2">
-          <dt className="text-base font-semibold text-porcelain-950">Quoted total</dt>
-          <dd className="text-xl font-semibold text-porcelain-900">
-            {currencySymbol(currency)}
-            {formatAmount(totals.quotedTotal)}
-          </dd>
-        </div>
-      </dl>
+      {summary.productCount > 0 && summary.allPriced && (
+        <p className="mt-3 text-xs leading-relaxed text-porcelain-600">
+          All products have a quoted unit price.
+        </p>
+      )}
 
-      {totals.unpricedLineCount > 0 && (
+      {summary.unpricedCount > 0 && (
         <p className="mt-3 text-xs leading-relaxed font-medium text-red-700">
-          {totals.unpricedLineCount}{" "}
-          {totals.unpricedLineCount === 1 ? "product still needs" : "products still need"}{" "}
-          a quoted price. The total is incomplete until{" "}
-          {totals.unpricedLineCount === 1 ? "it is" : "they are"} priced.
+          {summary.unpricedCount === 1
+            ? "1 product still needs a quoted unit price."
+            : `${summary.unpricedCount} products still need a quoted unit price.`}
         </p>
       )}
     </section>

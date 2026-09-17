@@ -62,7 +62,7 @@ export default function ProductDetailView({
         <DetailRow label="Packaging" value={product.packaging} />
       </dl>
 
-      <AddToInquiry product={product} />
+      <AddToInquiry product={product} onScanAnother={onBack} />
     </div>
   );
 }

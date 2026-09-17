@@ -54,7 +54,7 @@ const INQUIRY_BODY = {
   companyName: "Koei",
   notes: "",
   currency: "USD",
-  items: [{ productId: PRODUCT.id, quantity: 2, quotedPrice: 2.4 }],
+  items: [{ productId: PRODUCT.id, quotedPrice: 2.4 }],
 };
 
 function jsonRequest(url: string, init?: RequestInit) {
@@ -177,6 +177,14 @@ describe("authenticated application APIs", () => {
     expect(mocks.listAllActiveProducts).toHaveBeenCalled();
   });
 
+  it("does not expose update, append or delete inquiry endpoints", async () => {
+    const inquiriesRoute = await import("@/app/api/inquiries/route");
+    expect(inquiriesRoute.POST).toEqual(expect.any(Function));
+    expect(inquiriesRoute).not.toHaveProperty("PUT");
+    expect(inquiriesRoute).not.toHaveProperty("PATCH");
+    expect(inquiriesRoute).not.toHaveProperty("DELETE");
+  });
+
   it("saves an inquiry after Auth verification", async () => {
     mocks.createInquiry.mockResolvedValue("inquiry-1");
     const response = await createInquiryRoute(
@@ -189,6 +197,28 @@ describe("authenticated application APIs", () => {
     expect(response.status).toBe(201);
     await expect(response.json()).resolves.toEqual({ inquiryId: "inquiry-1" });
     expect(mocks.createInquiry).toHaveBeenCalled();
+  });
+
+  it("does not pass a client-supplied quantity through to persistence", async () => {
+    mocks.createInquiry.mockResolvedValue("inquiry-1");
+    const response = await createInquiryRoute(
+      jsonRequest("http://localhost/api/inquiries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...INQUIRY_BODY,
+          items: [{ productId: PRODUCT.id, quantity: 99, quotedPrice: 2.4 }],
+        }),
+      }),
+    );
+    expect(response.status).toBe(201);
+    expect(mocks.createInquiry).toHaveBeenCalledWith({
+      customerName: "Ada Lovelace",
+      companyName: "Koei",
+      notes: "",
+      currency: "USD",
+      items: [{ productId: PRODUCT.id, quotedPrice: 2.4 }],
+    });
   });
 
   it("still returns validation errors for authenticated inquiry submissions", async () => {

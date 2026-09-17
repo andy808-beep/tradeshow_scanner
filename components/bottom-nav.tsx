@@ -13,7 +13,7 @@ function navClasses(isActive: boolean): string {
 
 export default function BottomNav() {
   const pathname = usePathname();
-  const { totals } = useInquiry();
+  const { lines } = useInquiry();
 
   const onInquiry = pathname === "/inquiry";
   const onLabels = pathname === "/labels";
@@ -33,9 +33,9 @@ export default function BottomNav() {
         >
           <span aria-hidden>📋</span>
           Inquiry
-          {totals.lineCount > 0 && (
+          {lines.length > 0 && (
             <span className="absolute top-1 right-1/2 -mr-5 inline-flex min-w-5 justify-center rounded-full bg-porcelain-600 px-1.5 py-0.5 text-[10px] leading-none font-semibold text-white">
-              {totals.lineCount}
+              {lines.length}
             </span>
           )}
         </Link>

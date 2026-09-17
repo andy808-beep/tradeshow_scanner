@@ -9,13 +9,13 @@ function body(overrides: Record<string, unknown> = {}) {
     companyName: "Koei",
     notes: "",
     currency: "USD",
-    items: [{ productId: PRODUCT_ID, quantity: 2, quotedPrice: 2.4 }],
+    items: [{ productId: PRODUCT_ID, quotedPrice: 2.4 }],
     ...overrides,
   };
 }
 
 function item(overrides: Record<string, unknown> = {}) {
-  return [{ productId: PRODUCT_ID, quantity: 1, quotedPrice: 2.4, ...overrides }];
+  return [{ productId: PRODUCT_ID, quotedPrice: 2.4, ...overrides }];
 }
 
 describe("quoted price is required", () => {
@@ -24,6 +24,7 @@ describe("quoted price is required", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.items[0].quotedPrice).toBe(2.4);
+    expect(result.value.items[0]).not.toHaveProperty("quantity");
   });
 
   it("accepts a deliberate zero", () => {
@@ -41,9 +42,7 @@ describe("quoted price is required", () => {
   });
 
   it("rejects a missing price field", () => {
-    const result = validateCreateInquiry(
-      body({ items: [{ productId: PRODUCT_ID, quantity: 1 }] }),
-    );
+    const result = validateCreateInquiry(body({ items: [{ productId: PRODUCT_ID }] }));
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.errors.join(" ")).toMatch(/needs a quoted price/);
@@ -71,10 +70,9 @@ describe("quoted price is required", () => {
     const result = validateCreateInquiry(
       body({
         items: [
-          { productId: PRODUCT_ID, quantity: 1, quotedPrice: 2.4 },
+          { productId: PRODUCT_ID, quotedPrice: 2.4 },
           {
             productId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
-            quantity: 1,
             quotedPrice: null,
           },
         ],
@@ -84,6 +82,27 @@ describe("quoted price is required", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.errors.join(" ")).toMatch(/Item 2/);
+  });
+});
+
+describe("client-supplied quantity is ignored", () => {
+  it("accepts a body that does not contain quantity", () => {
+    const payload = body();
+    expect(JSON.stringify(payload)).not.toMatch(/quantity/i);
+    const result = validateCreateInquiry(payload);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.items[0]).not.toHaveProperty("quantity");
+  });
+
+  it("does not trust or store a quantity a stale client still sends", () => {
+    for (const quantity of [0, 1, 2, 99, -2, 1.5, "3"]) {
+      const result = validateCreateInquiry(body({ items: item({ quantity }) }));
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.items[0]).not.toHaveProperty("quantity");
+      expect(result.value.items[0]).toEqual({ productId: PRODUCT_ID, quotedPrice: 2.4 });
+    }
   });
 });
 
@@ -123,10 +142,13 @@ describe("unchanged validation still holds", () => {
     expect(validateCreateInquiry(body({ items: [] })).ok).toBe(false);
   });
 
-  it("requires positive whole-number quantities", () => {
-    expect(validateCreateInquiry(body({ items: item({ quantity: 0 }) })).ok).toBe(false);
-    expect(validateCreateInquiry(body({ items: item({ quantity: 1.5 }) })).ok).toBe(false);
-    expect(validateCreateInquiry(body({ items: item({ quantity: -2 }) })).ok).toBe(false);
+  it("does not require unique customer or company names", () => {
+    expect(validateCreateInquiry(body({ customerName: "Ada", companyName: "Koei" })).ok).toBe(
+      true,
+    );
+    expect(validateCreateInquiry(body({ customerName: "Ada", companyName: "Koei" })).ok).toBe(
+      true,
+    );
   });
 
   it("rejects an unsupported currency", () => {
@@ -137,8 +159,8 @@ describe("unchanged validation still holds", () => {
     const result = validateCreateInquiry(
       body({
         items: [
-          { productId: PRODUCT_ID, quantity: 1, quotedPrice: 1 },
-          { productId: PRODUCT_ID, quantity: 2, quotedPrice: 2 },
+          { productId: PRODUCT_ID, quotedPrice: 1 },
+          { productId: PRODUCT_ID, quotedPrice: 2 },
         ],
       }),
     );

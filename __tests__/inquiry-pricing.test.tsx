@@ -3,11 +3,12 @@ import { afterEach, describe, expect, it } from "vitest";
 import { InquiryProvider, useInquiry } from "@/components/inquiry-store";
 import {
   allLinesPriced,
-  calculateTotals,
+  canSubmitInquiry,
   isLinePriced,
   isValidQuotedPrice,
-  lineTotal,
   parsePriceInput,
+  selectedProductsLabel,
+  summarizeInquiry,
 } from "@/lib/inquiry";
 import type { InquiryLine, Product } from "@/lib/types";
 
@@ -35,7 +36,7 @@ const UNPRICED = product({
 });
 
 function line(overrides: Partial<InquiryLine> = {}): InquiryLine {
-  return { product: product(), quantity: 1, quotedUnitPrice: 2.4, ...overrides };
+  return { product: product(), quotedUnitPrice: 2.4, ...overrides };
 }
 
 function setup() {
@@ -93,25 +94,7 @@ describe("seeding the quoted price", () => {
 });
 
 describe("an edited quoted price is never overwritten", () => {
-  it("survives a quantity increase", () => {
-    const { result } = setup();
-    const item = product();
-
-    act(() => {
-      result.current.addProduct(item);
-    });
-    act(() => {
-      result.current.setQuotedUnitPrice(item.id, 9.99);
-    });
-    act(() => {
-      result.current.setQuantity(item.id, 5);
-    });
-
-    expect(result.current.lines[0].quantity).toBe(5);
-    expect(result.current.lines[0].quotedUnitPrice).toBe(9.99);
-  });
-
-  it("survives re-adding the same product, which only bumps the quantity", () => {
+  it("survives navigating away and adding the same product again", () => {
     const { result } = setup();
     const item = product();
 
@@ -126,7 +109,6 @@ describe("an edited quoted price is never overwritten", () => {
     });
 
     expect(result.current.lines).toHaveLength(1);
-    expect(result.current.lines[0].quantity).toBe(2);
     expect(result.current.lines[0].quotedUnitPrice).toBe(9.99);
   });
 
@@ -145,7 +127,7 @@ describe("an edited quoted price is never overwritten", () => {
     });
 
     expect(result.current.lines[0].quotedUnitPrice).toBeNull();
-    expect(result.current.lines[0].quantity).toBe(2);
+    expect(result.current.lines).toHaveLength(1);
   });
 
   it("keeps a manually entered zero", () => {
@@ -159,11 +141,71 @@ describe("an edited quoted price is never overwritten", () => {
       result.current.setQuotedUnitPrice(item.id, 0);
     });
     act(() => {
-      result.current.setQuantity(item.id, 3);
+      result.current.addProduct(item);
     });
 
     expect(result.current.lines[0].quotedUnitPrice).toBe(0);
     expect(allLinesPriced(result.current.lines)).toBe(true);
+  });
+});
+
+describe("one line per product", () => {
+  it("creates exactly one inquiry line on the first add", () => {
+    const { result } = setup();
+    const item = product();
+
+    act(() => {
+      result.current.addProduct(item);
+    });
+
+    expect(result.current.lines).toHaveLength(1);
+    expect(result.current.lines[0].product.id).toBe(item.id);
+  });
+
+  it("does not modify state when the same product is added again", () => {
+    const { result } = setup();
+    const item = product();
+
+    act(() => {
+      result.current.addProduct(item);
+    });
+    const snapshot = result.current.lines;
+
+    act(() => {
+      result.current.addProduct({ ...item, nameEn: "Renamed in catalogue" });
+    });
+
+    expect(result.current.lines).toBe(snapshot);
+    expect(result.current.lines[0].product.nameEn).toBe("Cup and Saucer");
+  });
+
+  it("identifies products by id, not by name or code display text", () => {
+    const { result } = setup();
+    const first = product({ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", code: "SAME", nameEn: "Same" });
+    const second = product({ id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", code: "SAME", nameEn: "Same" });
+
+    act(() => {
+      result.current.addProduct(first);
+      result.current.addProduct(second);
+    });
+
+    expect(result.current.lines).toHaveLength(2);
+    expect(result.current.summary.productCount).toBe(2);
+  });
+
+  it("adds different products normally", () => {
+    const { result } = setup();
+
+    act(() => {
+      result.current.addProduct(product());
+      result.current.addProduct(UNPRICED);
+    });
+
+    expect(result.current.lines.map((line) => line.product.id)).toEqual([
+      product().id,
+      UNPRICED.id,
+    ]);
+    expect(result.current.summary.productCount).toBe(2);
   });
 });
 
@@ -213,34 +255,41 @@ describe("allLinesPriced", () => {
   });
 });
 
-describe("totals", () => {
-  it("includes every line once all lines are priced", () => {
-    const totals = calculateTotals([
-      line({ quantity: 2, quotedUnitPrice: 2.5 }),
-      line({ quantity: 3, quotedUnitPrice: 1 }),
+describe("inquiry summary", () => {
+  it("counts distinct products and unpriced lines, with no monetary total", () => {
+    const summary = summarizeInquiry([
+      line({ quotedUnitPrice: 2.5 }),
+      line({ product: UNPRICED, quotedUnitPrice: null }),
     ]);
 
-    expect(totals.lineCount).toBe(2);
-    expect(totals.totalQuantity).toBe(5);
-    expect(totals.quotedTotal).toBe(8);
-    expect(totals.unpricedLineCount).toBe(0);
+    expect(summary.productCount).toBe(2);
+    expect(summary.unpricedCount).toBe(1);
+    expect(summary.allPriced).toBe(false);
+    expect(summary).not.toHaveProperty("quotedTotal");
+    expect(summary).not.toHaveProperty("totalQuantity");
+    expect(selectedProductsLabel(3)).toBe("3 products selected");
+    expect(selectedProductsLabel(1)).toBe("1 product selected");
   });
 
-  it("counts a zero-priced line as priced and contributing nothing", () => {
-    const totals = calculateTotals([line({ quantity: 4, quotedUnitPrice: 0 })]);
-
-    expect(totals.quotedTotal).toBe(0);
-    expect(totals.unpricedLineCount).toBe(0);
+  it("counts a zero-priced line as priced", () => {
+    const summary = summarizeInquiry([line({ quotedUnitPrice: 0 })]);
+    expect(summary.unpricedCount).toBe(0);
+    expect(summary.allPriced).toBe(true);
   });
+});
 
-  it("reports unpriced lines so submission can be blocked", () => {
-    const totals = calculateTotals([line(), line({ quotedUnitPrice: null })]);
-    expect(totals.unpricedLineCount).toBe(1);
-  });
-
-  it("returns no line total for an unpriced line", () => {
-    expect(lineTotal(line({ quotedUnitPrice: null }))).toBeNull();
-    expect(lineTotal(line({ quantity: 2, quotedUnitPrice: 0 }))).toBe(0);
+describe("canSubmitInquiry", () => {
+  it("requires a customer name, at least one product, and a quoted price on every line", () => {
+    expect(canSubmitInquiry([line()], { name: "Ada", company: "", notes: "" })).toBe(true);
+    expect(canSubmitInquiry([], { name: "Ada", company: "", notes: "" })).toBe(false);
+    expect(canSubmitInquiry([line()], { name: "  ", company: "", notes: "" })).toBe(false);
+    expect(
+      canSubmitInquiry([line({ quotedUnitPrice: null })], {
+        name: "Ada",
+        company: "",
+        notes: "",
+      }),
+    ).toBe(false);
   });
 });
 
@@ -259,5 +308,76 @@ describe("parsePriceInput", () => {
     expect(parsePriceInput("-5")).toBeNull();
     expect(parsePriceInput("abc")).toBeNull();
     expect(parsePriceInput(".")).toBeNull();
+  });
+});
+
+describe("a saved inquiry is locked until the next session starts", () => {
+  it("rejects edits after markSubmitted", () => {
+    const { result } = setup();
+    const item = product();
+
+    act(() => {
+      result.current.addProduct(item);
+      result.current.updateCustomer({ name: "Ada", company: "Koei", notes: "Booth A" });
+    });
+    act(() => {
+      result.current.markSubmitted("inquiry-1");
+    });
+
+    const snapshot = {
+      lines: result.current.lines,
+      customer: result.current.customer,
+    };
+
+    act(() => {
+      result.current.setQuotedUnitPrice(item.id, 1);
+      result.current.updateCustomer({ name: "Changed" });
+      result.current.removeLine(item.id);
+      result.current.addProduct(UNPRICED);
+    });
+
+    expect(result.current.confirmation).toEqual({
+      inquiryId: "inquiry-1",
+      customerName: "Ada",
+      companyName: "Koei",
+      productCount: 1,
+    });
+    expect(result.current.lines).toBe(snapshot.lines);
+    expect(result.current.customer).toEqual(snapshot.customer);
+  });
+
+  it("clears the complete previous session on start next inquiry", () => {
+    const { result } = setup();
+
+    act(() => {
+      result.current.addProduct(product());
+      result.current.updateCustomer({ name: "Ada", company: "Koei", notes: "Booth A" });
+      result.current.markSubmitted("inquiry-1");
+    });
+    act(() => {
+      result.current.clearInquiry();
+    });
+
+    expect(result.current.confirmation).toBeNull();
+    expect(result.current.lines).toEqual([]);
+    expect(result.current.customer).toEqual({ name: "", company: "", notes: "" });
+  });
+
+  it("lets the next inquiry reuse the same customer and company names", () => {
+    const { result } = setup();
+
+    act(() => {
+      result.current.addProduct(product());
+      result.current.updateCustomer({ name: "Ada", company: "Koei" });
+      result.current.markSubmitted("inquiry-1");
+      result.current.clearInquiry();
+      result.current.updateCustomer({ name: "Ada", company: "Koei" });
+      result.current.addProduct(UNPRICED);
+    });
+
+    expect(result.current.confirmation).toBeNull();
+    expect(result.current.customer).toEqual({ name: "Ada", company: "Koei", notes: "" });
+    expect(result.current.lines).toHaveLength(1);
+    expect(result.current.lines[0].product.id).toBe(UNPRICED.id);
   });
 });

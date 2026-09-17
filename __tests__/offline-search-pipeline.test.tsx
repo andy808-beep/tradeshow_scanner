@@ -277,7 +277,7 @@ describe("selecting an offline result", () => {
     expect(screen.getByText("24 pcs/ctn")).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Add to inquiry" }));
-    expect(await screen.findByText(/1 in this inquiry/)).toBeVisible();
+    expect(await screen.findByText("Added to inquiry")).toBeVisible();
     expect(productApiCalls()).toEqual([]);
   });
 

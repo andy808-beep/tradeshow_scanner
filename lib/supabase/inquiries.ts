@@ -50,7 +50,10 @@ export async function createInquiry(input: CreateInquiryRequest): Promise<string
     p_currency: input.currency,
     p_items: input.items.map((item) => ({
       productId: item.productId,
-      quantity: item.quantity,
+      // Quantity is not collected at the booth. The existing RPC and
+      // positive-quantity constraint still require a value, so every new
+      // row is stored as 1. Client-supplied quantity is never read.
+      quantity: 1,
       quotedPrice: item.quotedPrice,
     })),
   });

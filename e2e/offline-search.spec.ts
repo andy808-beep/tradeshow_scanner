@@ -100,7 +100,7 @@ test("finds, opens and quotes a synced product with the network off", async ({
 
   // The cached product can still be quoted offline.
   await page.getByRole("button", { name: "Add to inquiry" }).click();
-  await expect(page.getByText(/1 in this inquiry/)).toBeVisible();
+  await expect(page.getByText("Added to inquiry")).toBeVisible();
 
   expect(productRequests).toEqual([]);
 });

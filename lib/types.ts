@@ -19,7 +19,6 @@ export interface Product {
 
 export interface InquiryLine {
   product: Product;
-  quantity: number;
   /**
    * Seeded from `product.unitPrice` when the product is first added, then owned
    * by the employee. `null` means no price is set yet — either the product has

@@ -199,7 +199,7 @@ describe("offline scan acceptance", () => {
 
     // 10. The cached product can be added to the inquiry offline.
     fireEvent.click(screen.getByRole("button", { name: "Add to inquiry" }));
-    expect(await screen.findByText(/1 in this inquiry/)).toBeVisible();
+    expect(await screen.findByText("Added to inquiry")).toBeVisible();
     expect(productApiCalls()).toEqual([]);
     expect(fetchSpy.mock.calls.length).toBe(callsBeforeScan);
   });

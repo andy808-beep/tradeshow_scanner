@@ -1,5 +1,4 @@
 import { DEFAULT_CURRENCY } from "./format";
-import { MAX_QUANTITY } from "./inquiry";
 import type { Product } from "./types";
 
 /** Only one currency is supported, which also enforces "no mixing per inquiry". */
@@ -23,7 +22,6 @@ export interface ProductResponse {
 
 export interface InquiryItemRequest {
   productId: string;
-  quantity: number;
   /** Required. Zero is allowed; absent, null and negative are not. */
   quotedPrice: number;
 }
@@ -63,6 +61,9 @@ function readText(value: unknown): string {
 /**
  * Validates an untrusted request body. Runs on the server only; the client is
  * never trusted to have checked any of this.
+ *
+ * Quantity is not part of the client contract. If a stale client still sends
+ * it, the value is ignored rather than stored.
  */
 export function validateCreateInquiry(body: unknown): ValidationResult {
   const errors: string[] = [];
@@ -116,13 +117,6 @@ export function validateCreateInquiry(body: unknown): ValidationResult {
         errors.push(`${position} has an invalid product id.`);
       }
 
-      const { quantity } = rawItem;
-      if (typeof quantity !== "number" || !Number.isInteger(quantity) || quantity < 1) {
-        errors.push(`${position} needs a positive whole-number quantity.`);
-      } else if (quantity > MAX_QUANTITY) {
-        errors.push(`${position} exceeds the maximum quantity of ${MAX_QUANTITY}.`);
-      }
-
       // A quoted price is mandatory. Zero is accepted as a deliberate choice,
       // but null, undefined, a blank string and anything non-numeric are not.
       const raw = rawItem.quotedPrice;
@@ -138,7 +132,7 @@ export function validateCreateInquiry(body: unknown): ValidationResult {
       }
 
       if (errors.length === 0) {
-        items.push({ productId, quantity: quantity as number, quotedPrice });
+        items.push({ productId, quotedPrice });
       }
     });
 

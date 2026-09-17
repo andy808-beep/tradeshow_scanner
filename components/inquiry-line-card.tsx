@@ -1,29 +1,25 @@
 "use client";
 
 import { useState } from "react";
-import { currencySymbol, formatAmount } from "@/lib/format";
+import { currencySymbol, formatMoney } from "@/lib/format";
 import {
   isLinePriced,
-  lineTotal,
   parsePriceInput,
   sanitizeDecimalInput,
 } from "@/lib/inquiry";
 import { productTitle, type InquiryLine } from "@/lib/types";
 import { useInquiry } from "./inquiry-store";
-import { PendingBadge } from "./pending";
-import QuantityStepper from "./quantity-stepper";
 
 export const NO_LISTED_PRICE_MESSAGE =
   "Listed price unavailable — enter a quoted price";
 export const PRICE_REQUIRED_MESSAGE = "Enter a quoted price before saving";
 
 export default function InquiryLineCard({ line }: { line: InquiryLine }) {
-  const { setQuantity, setQuotedUnitPrice, removeLine } = useInquiry();
+  const { setQuotedUnitPrice, removeLine } = useInquiry();
   const [priceDraft, setPriceDraft] = useState<string | null>(null);
 
   const { product } = line;
   const storedPrice = line.quotedUnitPrice === null ? "" : String(line.quotedUnitPrice);
-  const total = lineTotal(line);
 
   const priced = isLinePriced(line);
   // A product with no listed price starts blank, so name that cause explicitly
@@ -53,25 +49,28 @@ export default function InquiryLineCard({ line }: { line: InquiryLine }) {
           {product.nameEn && product.nameZh && (
             <p className="truncate text-sm text-porcelain-700">{product.nameEn}</p>
           )}
+          {product.dimensions && (
+            <p className="mt-1 text-sm text-porcelain-600">{product.dimensions}</p>
+          )}
         </div>
         <button
           type="button"
           onClick={() => removeLine(product.id)}
           className="shrink-0 text-sm font-medium text-porcelain-500 underline"
         >
-          Remove
+          Remove product
         </button>
       </div>
 
       <div className="mt-4 space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-sm text-porcelain-600">Quantity</span>
-          <QuantityStepper
-            value={line.quantity}
-            onChange={(quantity) => setQuantity(product.id, quantity)}
-            label={`Quantity for ${product.code}`}
-          />
-        </div>
+        {product.unitPrice !== null && (
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-sm text-porcelain-600">Listed unit price</span>
+            <span className="text-sm font-medium text-porcelain-950">
+              {formatMoney(product.unitPrice, product.currency)}
+            </span>
+          </div>
+        )}
 
         <div>
           <div className="flex items-center justify-between gap-3">
@@ -110,17 +109,6 @@ export default function InquiryLineCard({ line }: { line: InquiryLine }) {
               {priceError}
             </p>
           )}
-        </div>
-
-        <div className="flex items-baseline justify-between gap-3 border-t border-porcelain-100 pt-3">
-          <span className="text-sm text-porcelain-600">Line total</span>
-          <span className="text-base font-semibold text-porcelain-950">
-            {total === null ? (
-              <PendingBadge />
-            ) : (
-              `${currencySymbol(product.currency)}${formatAmount(total)}`
-            )}
-          </span>
         </div>
       </div>
     </article>

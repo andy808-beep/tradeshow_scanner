@@ -5,7 +5,7 @@ import type { Product } from "@/lib/types";
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
-  searchProductsRequest: vi.fn(),
+  scanProductsLocalFirst: vi.fn(),
   decodeFromConstraints: vi.fn(),
   controlsStop: vi.fn(),
 }));
@@ -14,9 +14,20 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mocks.push }),
 }));
 
-vi.mock("@/lib/api-client", () => ({
-  searchProductsRequest: mocks.searchProductsRequest,
-  ApiError: class ApiError extends Error {},
+vi.mock("@/lib/offline/lookup", () => ({
+  scanProductsLocalFirst: mocks.scanProductsLocalFirst,
+}));
+
+vi.mock("@/components/catalogue-provider", () => ({
+  useCatalogue: () => ({
+    products: [],
+    access: {
+      kind: "ready",
+      meta: { lastSyncedAt: Date.now(), count: 1 },
+      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+    },
+    online: true,
+  }),
 }));
 
 vi.mock("@zxing/library", () => ({
@@ -102,7 +113,11 @@ beforeEach(() => {
       return { stop: mocks.controlsStop };
     },
   );
-  mocks.searchProductsRequest.mockResolvedValue([]);
+  mocks.scanProductsLocalFirst.mockResolvedValue({
+    status: "error",
+    reason: "notFoundLocal",
+    message: "No matching product in the offline catalogue.",
+  });
 });
 
 afterEach(() => {
@@ -170,7 +185,11 @@ describe("camera unavailable", () => {
 
 describe("successful decoding", () => {
   it("navigates straight to a single matching product", async () => {
-    mocks.searchProductsRequest.mockResolvedValue([PRODUCT]);
+    mocks.scanProductsLocalFirst.mockResolvedValue({
+      status: "match",
+      match: { kind: "single", product: PRODUCT },
+      source: "local",
+    });
 
     renderScanner();
     await screen.findByText("Camera active — point at a barcode");
@@ -182,7 +201,11 @@ describe("successful decoding", () => {
   });
 
   it("stops the camera as soon as a code is detected", async () => {
-    mocks.searchProductsRequest.mockResolvedValue([PRODUCT]);
+    mocks.scanProductsLocalFirst.mockResolvedValue({
+      status: "match",
+      match: { kind: "single", product: PRODUCT },
+      source: "local",
+    });
 
     renderScanner();
     await screen.findByText("Camera active — point at a barcode");
@@ -195,23 +218,31 @@ describe("successful decoding", () => {
   });
 
   it("preserves the raw decoded value exactly", async () => {
-    mocks.searchProductsRequest.mockResolvedValue([]);
+    mocks.scanProductsLocalFirst.mockResolvedValue({
+      status: "error",
+      reason: "notFoundLocal",
+      message: "No matching product in the offline catalogue.",
+    });
 
     renderScanner();
     await screen.findByText("Camera active — point at a barcode");
     await emit("0012345678905");
 
     await waitFor(() => {
-      expect(mocks.searchProductsRequest).toHaveBeenCalled();
+      expect(mocks.scanProductsLocalFirst).toHaveBeenCalled();
     });
-    const [sentValue] = mocks.searchProductsRequest.mock.calls[0];
-    expect(sentValue).toBe("0012345678905");
-    expect(typeof sentValue).toBe("string");
+    const rawValue = mocks.scanProductsLocalFirst.mock.calls[0][2];
+    expect(rawValue).toBe("0012345678905");
+    expect(typeof rawValue).toBe("string");
   });
 
   it("hands several matches back to the search page", async () => {
     const second = { ...PRODUCT, id: "other", code: "K10188-14" };
-    mocks.searchProductsRequest.mockResolvedValue([PRODUCT, second]);
+    mocks.scanProductsLocalFirst.mockResolvedValue({
+      status: "match",
+      match: { kind: "multiple", products: [PRODUCT, second] },
+      source: "local",
+    });
     const onMultipleResults = vi.fn();
 
     renderScanner({ onMultipleResults });
@@ -227,8 +258,6 @@ describe("successful decoding", () => {
 
 describe("unknown barcode", () => {
   it("shows the raw value and offers to copy it", async () => {
-    mocks.searchProductsRequest.mockResolvedValue([]);
-
     renderScanner();
     await screen.findByText("Camera active — point at a barcode");
     await emit("9999999999999");
@@ -243,8 +272,6 @@ describe("unknown barcode", () => {
 
 describe("repeated detections", () => {
   it("looks up a code only once even when the decoder keeps firing", async () => {
-    mocks.searchProductsRequest.mockResolvedValue([]);
-
     renderScanner();
     await screen.findByText("Camera active — point at a barcode");
 
@@ -253,21 +280,19 @@ describe("repeated detections", () => {
     await emit("4901234567894");
 
     await waitFor(() => {
-      expect(mocks.searchProductsRequest).toHaveBeenCalledTimes(1);
+      expect(mocks.scanProductsLocalFirst).toHaveBeenCalledTimes(1);
     });
   });
 
   it("ignores a different code once one has been handled", async () => {
-    mocks.searchProductsRequest.mockResolvedValue([]);
-
     renderScanner();
     await screen.findByText("Camera active — point at a barcode");
 
     await emit("1111111111111");
     await emit("2222222222222");
 
-    expect(mocks.searchProductsRequest).toHaveBeenCalledTimes(1);
-    expect(mocks.searchProductsRequest.mock.calls[0][0]).toBe("1111111111111");
+    expect(mocks.scanProductsLocalFirst).toHaveBeenCalledTimes(1);
+    expect(mocks.scanProductsLocalFirst.mock.calls[0][2]).toBe("1111111111111");
   });
 });
 
@@ -305,7 +330,11 @@ describe("manual entry", () => {
     mocks.decodeFromConstraints.mockRejectedValue(
       Object.assign(new Error("nope"), { name: "NotAllowedError" }),
     );
-    mocks.searchProductsRequest.mockResolvedValue([PRODUCT]);
+    mocks.scanProductsLocalFirst.mockResolvedValue({
+      status: "match",
+      match: { kind: "single", product: PRODUCT },
+      source: "local",
+    });
 
     renderScanner();
     await screen.findByText(/Camera access was blocked/);

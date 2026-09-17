@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import BottomNav from "@/components/bottom-nav";
+import CatalogueStatus from "@/components/catalogue-status";
+import { CatalogueProvider } from "@/components/catalogue-provider";
 import SiteHeader from "@/components/site-header";
 import { AuthenticationError } from "@/lib/auth/errors";
 import { requireAuthenticatedUser } from "@/lib/auth/session";
@@ -24,10 +26,11 @@ export default async function AppLayout({
   }
 
   return (
-    <>
+    <CatalogueProvider>
       <SiteHeader email={email} />
+      <CatalogueStatus />
       <main className="flex-1 px-4 pt-4 pb-24 print:p-0">{children}</main>
       <BottomNav />
-    </>
+    </CatalogueProvider>
   );
 }

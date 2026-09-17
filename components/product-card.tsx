@@ -6,6 +6,7 @@ export default function ProductCard({ product }: { product: Product }) {
   return (
     <Link
       href={`/products/${encodeURIComponent(product.code)}`}
+      prefetch={false}
       className="block rounded-xl border border-porcelain-200 bg-white p-4 shadow-sm transition-colors active:bg-porcelain-50"
     >
       <p className="font-mono text-xs font-semibold tracking-wider text-porcelain-600">

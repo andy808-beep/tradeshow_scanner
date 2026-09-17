@@ -38,6 +38,19 @@ describe("service-role key stays off the browser", () => {
     }
   });
 
+  it("does not query Supabase tables from the offline client library", () => {
+    const files = walk(path.join(ROOT, "lib", "offline")).filter((file) =>
+      /\.(ts|tsx)$/.test(file),
+    );
+    expect(files.length).toBeGreaterThan(0);
+    for (const file of files) {
+      const source = readFileSync(file, "utf8");
+      expect(source).not.toMatch(/from "@\/lib\/supabase/);
+      expect(source).not.toMatch(/createBrowserClient|createClient/);
+      expect(source).not.toMatch(/SUPABASE_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY/);
+    }
+  });
+
   it("keeps the browser auth client on the public key", () => {
     const source = read("lib/supabase/browser.ts");
     expect(source).toMatch(/createBrowserClient/);

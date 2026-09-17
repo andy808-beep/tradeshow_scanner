@@ -4,25 +4,25 @@ import type { IScannerControls } from "@zxing/browser";
 import type { DecodeHintType } from "@zxing/library";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { searchProductsRequest } from "@/lib/api-client";
+import { useCatalogue } from "@/components/catalogue-provider";
 import {
   buildDecodeHints,
   CAMERA_UNSUPPORTED,
   describeCameraError,
   hasCameraSupport,
   REAR_CAMERA_CONSTRAINTS,
-  resolveScanMatch,
   stopMediaStream,
   type CameraErrorInfo,
 } from "@/lib/barcode";
+import { scanProductsLocalFirst } from "@/lib/offline/lookup";
 import type { Product } from "@/lib/types";
 
 /**
  * Full-screen barcode scanner.
  *
  * Frames are decoded in memory by ZXing and never stored or uploaded; only the
- * decoded text leaves this component, and it is sent to the existing product
- * search endpoint unchanged.
+ * decoded text leaves this component, and it is looked up in the local
+ * catalogue first.
  */
 
 type Status =
@@ -53,6 +53,7 @@ export default function BarcodeScanner({
   onMultipleResults,
 }: BarcodeScannerProps) {
   const router = useRouter();
+  const { products: catalogue, access, online } = useCatalogue();
   const videoRef = useRef<HTMLVideoElement>(null);
   const controlsRef = useRef<IScannerControls | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -82,8 +83,28 @@ export default function BarcodeScanner({
       abortRef.current = controller;
 
       try {
-        const products = await searchProductsRequest(rawValue, controller.signal);
-        const match = resolveScanMatch(rawValue, products);
+        const result = await scanProductsLocalFirst(
+          catalogue,
+          access,
+          rawValue,
+          controller.signal,
+          online,
+        );
+
+        if (result.status === "error") {
+          if (result.reason === "notFoundLocal") {
+            setStatus({ kind: "notFound", raw: rawValue });
+          } else {
+            setStatus({
+              kind: "lookupFailed",
+              raw: rawValue,
+              message: result.message,
+            });
+          }
+          return;
+        }
+
+        const { match } = result;
 
         if (match.kind === "single") {
           stopCamera();
@@ -109,7 +130,7 @@ export default function BarcodeScanner({
         });
       }
     },
-    [onMultipleResults, router, stopCamera],
+    [access, catalogue, onMultipleResults, online, router, stopCamera],
   );
 
   // Held in a ref so the camera effect never restarts when this changes.

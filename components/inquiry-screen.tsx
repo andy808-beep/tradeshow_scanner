@@ -8,6 +8,7 @@ import CustomerForm from "./customer-form";
 import InquiryLineCard from "./inquiry-line-card";
 import { useInquiry } from "./inquiry-store";
 import InquirySummary from "./inquiry-summary";
+import OnlineOnlyNotice from "./online-only-notice";
 
 type SaveState =
   | { status: "idle" }
@@ -93,6 +94,10 @@ export default function InquiryScreen() {
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold text-porcelain-950">Inquiry</h1>
+      <OnlineOnlyNotice>
+        Saving an inquiry needs a network connection in this version. Queued
+        offline submission is not available yet.
+      </OnlineOnlyNotice>
 
       {saved && (
         <section className="rounded-xl border border-emerald-300 bg-emerald-50 p-4">

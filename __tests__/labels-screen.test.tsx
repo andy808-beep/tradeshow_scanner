@@ -1,7 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act } from "react";
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Product } from "@/lib/types";
 import { DEFAULT_LABEL_LAYOUT } from "@/lib/label-layout";
@@ -47,7 +45,6 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
-  document.documentElement.removeAttribute("data-print-preview");
 });
 
 describe("exact encoded value on the barcode", () => {
@@ -95,14 +92,15 @@ describe("printed label content", () => {
   });
 });
 
-describe("print-only layout", () => {
-  it("marks chrome and controls so print CSS can hide them", async () => {
+describe("PDF export layout", () => {
+  it("does not offer browser print or print preview", async () => {
     render(<LabelsScreen />);
     await waitFor(() => expect(mocks.listLabelProductsRequest).toHaveBeenCalled());
 
-    expect(document.querySelector(".print-controls")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Print" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Print preview" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Print" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Print preview" })).toBeNull();
+    expect(screen.queryByText("Browser print (secondary)")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Exit preview" })).toBeNull();
   });
 
   it("offers PDF export with the A4 template, calibration and print instructions", async () => {
@@ -118,44 +116,12 @@ describe("print-only layout", () => {
     expect(screen.getByLabelText("Start at label")).toHaveAttribute("max", "40");
     expect(screen.getByLabelText("Start at label")).toHaveAttribute("min", "1");
     expect(screen.getByText(/positions 1–40/i)).toBeVisible();
-    expect(screen.getByText(/The PDF template stays at 52.5 × 29.7 mm/)).toBeVisible();
     expect(screen.getByLabelText("Start at label")).toBeVisible();
     expect(screen.getByLabelText("Horizontal offset (mm)")).toBeVisible();
     expect(screen.getByLabelText("Vertical offset (mm)")).toBeVisible();
     expect(screen.getByText(/Load the A4 sticker sheet/)).toBeVisible();
     expect(screen.getByText(/Print at 100% \/ Actual size/)).toBeVisible();
     expect(screen.getByText(/First print the calibration PDF on ordinary A4 paper/)).toBeVisible();
-    expect(screen.getByText("Browser print (secondary)")).toBeVisible();
-  });
-
-  it("keeps labels from splitting across pages and preserves black/white bars", () => {
-    const css = readFileSync(
-      path.join(process.cwd(), "app", "globals.css"),
-      "utf8",
-    );
-
-    expect(css).toMatch(/@media print/);
-    expect(css).toMatch(/break-inside:\s*avoid/);
-    expect(css).toMatch(/print-color-adjust:\s*exact/);
-    expect(css).toMatch(/\.print-chrome/);
-    expect(css).toMatch(/\.print-controls/);
-    expect(css).toMatch(/background:\s*#fff/);
-    expect(css).toMatch(/color:\s*#000/);
-  });
-
-  it("puts the page into print-preview mode without printing", async () => {
-    render(<LabelsScreen />);
-    await waitFor(() => expect(screen.getByLabelText("Select K10188-13")).toBeTruthy());
-
-    await act(async () => {
-      screen.getByLabelText("Select K10188-13").click();
-    });
-    await act(async () => {
-      screen.getByRole("button", { name: "Print preview" }).click();
-    });
-
-    expect(document.documentElement.dataset.printPreview).toBe("true");
-    expect(screen.getByRole("button", { name: "Exit preview" })).toBeVisible();
   });
 });
 

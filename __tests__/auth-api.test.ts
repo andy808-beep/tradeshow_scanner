@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   searchProducts: vi.fn(),
   getProductByCode: vi.fn(),
   listActiveProducts: vi.fn(),
+  listAllActiveProducts: vi.fn(),
   createInquiry: vi.fn(),
 }));
 
@@ -35,6 +36,7 @@ vi.mock("@/lib/supabase/products", () => ({
   searchProducts: mocks.searchProducts,
   getProductByCode: mocks.getProductByCode,
   listActiveProducts: mocks.listActiveProducts,
+  listAllActiveProducts: mocks.listAllActiveProducts,
 }));
 
 vi.mock("@/lib/supabase/inquiries", () => ({
@@ -44,6 +46,7 @@ vi.mock("@/lib/supabase/inquiries", () => ({
 const { GET: searchProductsRoute } = await import("@/app/api/products/route");
 const { GET: productByCodeRoute } = await import("@/app/api/products/[code]/route");
 const { GET: labelProductsRoute } = await import("@/app/api/products/labels/route");
+const { GET: catalogueRoute } = await import("@/app/api/products/catalogue/route");
 const { POST: createInquiryRoute } = await import("@/app/api/inquiries/route");
 
 const INQUIRY_BODY = {
@@ -92,6 +95,13 @@ describe("unauthenticated APIs return 401 JSON", () => {
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toEqual({ error: AUTHENTICATION_REQUIRED });
     expect(mocks.listActiveProducts).not.toHaveBeenCalled();
+  });
+
+  it("does not download the sync catalogue without a verified user", async () => {
+    const response = await catalogueRoute(jsonRequest("http://localhost/api/products/catalogue"));
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({ error: AUTHENTICATION_REQUIRED });
+    expect(mocks.listAllActiveProducts).not.toHaveBeenCalled();
   });
 
   it("does not save an inquiry, even with a valid body, without a verified user", async () => {
@@ -154,6 +164,17 @@ describe("authenticated application APIs", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ products: [PRODUCT] });
     expect(mocks.listActiveProducts).toHaveBeenCalledWith("");
+  });
+
+  it("returns the full catalogue after Auth verification", async () => {
+    mocks.listAllActiveProducts.mockResolvedValue([PRODUCT]);
+    const response = await catalogueRoute(
+      jsonRequest("http://localhost/api/products/catalogue"),
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toMatch(/no-store/);
+    await expect(response.json()).resolves.toEqual({ products: [PRODUCT], count: 1 });
+    expect(mocks.listAllActiveProducts).toHaveBeenCalled();
   });
 
   it("saves an inquiry after Auth verification", async () => {

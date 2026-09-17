@@ -2,28 +2,34 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
-import { searchProductsRequest } from "@/lib/api-client";
+import { useCatalogue } from "@/components/catalogue-provider";
+import { searchProductsLocalFirst } from "@/lib/offline/lookup";
 import type { Product } from "@/lib/types";
 import ProductCard from "./product-card";
 import ScanButton from "./scan-button";
 
-// Client-only and lazily loaded: the scanner and ZXing stay out of the initial
-// search bundle, and nothing touches `navigator` during server rendering.
 const BarcodeScanner = dynamic(() => import("./barcode-scanner"), { ssr: false });
 
 const DEBOUNCE_MS = 250;
 
 type SearchOutcome =
   | { status: "ready"; products: Product[] }
-  | { status: "error"; message: string };
+  | { status: "error"; title: string; message: string };
 
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
 }
 
+const ERROR_TITLES: Record<string, string> = {
+  unsynced: "Catalogue not synchronized",
+  expired: "Offline access expired",
+  network: "Network unavailable",
+  notFoundLocal: "Product not found locally",
+};
+
 export default function SearchPanel() {
+  const { products: catalogue, access, online } = useCatalogue();
   const [query, setQuery] = useState("");
-  /** Tagged with the query it belongs to, so a stale reply is never shown. */
   const [outcome, setOutcome] = useState<{
     query: string;
     result: SearchOutcome;
@@ -32,7 +38,6 @@ export default function SearchPanel() {
 
   const trimmed = query.trim();
 
-  /** A scan that matched several products lands back on this page. */
   function showScanResults(rawValue: string, products: Product[]) {
     setScannerOpen(false);
     setQuery(rawValue);
@@ -45,15 +50,35 @@ export default function SearchPanel() {
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       try {
-        const products = await searchProductsRequest(trimmed, controller.signal);
-        setOutcome({ query: trimmed, result: { status: "ready", products } });
+        const result = await searchProductsLocalFirst(
+          catalogue,
+          access,
+          trimmed,
+          controller.signal,
+          online,
+        );
+        if (result.status === "ready") {
+          setOutcome({
+            query: trimmed,
+            result: { status: "ready", products: result.products },
+          });
+          return;
+        }
+        setOutcome({
+          query: trimmed,
+          result: {
+            status: "error",
+            title: ERROR_TITLES[result.reason] ?? "Unavailable",
+            message: result.message,
+          },
+        });
       } catch (error) {
-        // A newer keystroke aborted this request; its result is irrelevant.
         if (isAbortError(error) || controller.signal.aborted) return;
         setOutcome({
           query: trimmed,
           result: {
             status: "error",
+            title: "Unavailable",
             message:
               error instanceof Error
                 ? error.message
@@ -63,12 +88,11 @@ export default function SearchPanel() {
       }
     }, DEBOUNCE_MS);
 
-    // Cancels both the pending debounce and any request already in flight.
     return () => {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [trimmed]);
+  }, [access, catalogue, online, trimmed]);
 
   const view: SearchOutcome | { status: "idle" } | { status: "loading" } =
     trimmed === ""
@@ -109,7 +133,7 @@ export default function SearchPanel() {
         {view.status === "idle" && (
           <p className="px-1 text-sm text-porcelain-500">
             Search by product code (for example K10188-13), barcode, or Chinese or
-            English name.
+            English name. Sync the catalogue before looking up prices.
           </p>
         )}
 
@@ -119,17 +143,14 @@ export default function SearchPanel() {
 
         {view.status === "error" && (
           <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-4 text-sm text-amber-900">
-            <p className="font-semibold">Database unavailable</p>
+            <p className="font-semibold">{view.title}</p>
             <p className="mt-1">{view.message}</p>
-            <p className="mt-1 text-amber-800">
-              Check the connection and try again in a moment.
-            </p>
           </div>
         )}
 
         {view.status === "ready" && view.products.length === 0 && (
           <p className="rounded-xl border border-dashed border-porcelain-300 bg-porcelain-50 px-4 py-6 text-center text-sm text-porcelain-600">
-            No product matches “{trimmed}”.
+            No matching product in the offline catalogue for “{trimmed}”.
           </p>
         )}
 

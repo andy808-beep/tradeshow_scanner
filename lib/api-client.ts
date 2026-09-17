@@ -2,6 +2,7 @@ import type {
   ApiErrorResponse,
   CreateInquiryRequest,
   CreateInquiryResponse,
+  ProductResponse,
   ProductSearchResponse,
 } from "./api-contract";
 import type { Product } from "./types";
@@ -57,6 +58,14 @@ export async function listLabelProductsRequest(
 
   const data = (await response.json()) as ProductSearchResponse;
   return data.products;
+}
+
+export async function getProductByCodeRequest(code: string): Promise<Product | null> {
+  const response = await fetch(`/api/products/${encodeURIComponent(code)}`);
+  if (response.status === 404) return null;
+  if (!response.ok) throw await toApiError(response);
+  const data = (await response.json()) as ProductResponse;
+  return data.product;
 }
 
 export async function createInquiryRequest(

@@ -13,6 +13,18 @@ vi.mock("@/lib/auth/actions", () => ({
   signOutAction: mocks.signOutAction,
 }));
 
+vi.mock("@/components/catalogue-provider", () => ({
+  useCatalogue: () => ({
+    resetLocal: vi.fn(),
+  }),
+}));
+
+vi.mock("@/components/inquiry-store", () => ({
+  useInquiry: () => ({
+    clearInquiry: vi.fn(),
+  }),
+}));
+
 const { default: LoginForm } = await import("@/components/login-form");
 const { default: SiteHeader } = await import("@/components/site-header");
 

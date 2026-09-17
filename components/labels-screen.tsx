@@ -4,11 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { listLabelProductsRequest } from "@/lib/api-client";
 import { describeCode39Error, isCode39Compatible } from "@/lib/code39";
 import {
-  clampLayout,
   DEFAULT_LABEL_LAYOUT,
   expandLabelCopies,
-  LABEL_LAYOUT_BOUNDS,
-  type LabelLayout,
   type LabelSelectionItem,
 } from "@/lib/label-layout";
 import {
@@ -29,6 +26,7 @@ import {
 } from "@/lib/label-selection";
 import { productTitle, type Product } from "@/lib/types";
 import LabelSheet from "./label-sheet";
+import OnlineOnlyNotice from "./online-only-notice";
 
 const fieldClasses =
   "h-10 w-full rounded-lg border border-porcelain-300 bg-white px-2.5 text-sm text-porcelain-950 focus:border-porcelain-500 focus:ring-2 focus:ring-porcelain-200 focus:outline-none";
@@ -50,9 +48,7 @@ export default function LabelsScreen() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<LabelSelectionItem<Product>[]>([]);
-  const [layout, setLayout] = useState<LabelLayout>(DEFAULT_LABEL_LAYOUT);
   const [pdfSettings, setPdfSettings] = useState<LabelPdfSettings>(DEFAULT_LABEL_PDF_SETTINGS);
-  const [printPreview, setPrintPreview] = useState(false);
   const [pdfBusy, setPdfBusy] = useState<"production" | "calibration" | null>(null);
   const [pdfError, setPdfError] = useState<string | null>(null);
 
@@ -73,31 +69,14 @@ export default function LabelsScreen() {
     return () => controller.abort();
   }, []);
 
-  useEffect(() => {
-    const root = document.documentElement;
-    if (printPreview) root.dataset.printPreview = "true";
-    else delete root.dataset.printPreview;
-    return () => {
-      delete root.dataset.printPreview;
-    };
-  }, [printPreview]);
-
   const results = useMemo(() => filterCatalogue(catalogue, query), [catalogue, query]);
   const printable = useMemo(() => expandLabelCopies(selected), [selected]);
   const invalidSelected = selected.filter((item) => !isCode39Compatible(item.product.code));
   const allResultsSelected =
     results.length > 0 && results.every((product) => isSelected(selected, product.id));
 
-  function patchLayout(patch: Partial<LabelLayout>) {
-    setLayout((current) => clampLayout({ ...current, ...patch }));
-  }
-
   function patchPdf(patch: Partial<LabelPdfSettings>) {
     setPdfSettings((current) => clampPdfSettings({ ...current, ...patch }));
-  }
-
-  function handlePrint() {
-    window.print();
   }
 
   const pdfProducts = useMemo(
@@ -150,6 +129,9 @@ export default function LabelsScreen() {
   return (
     <div className="space-y-4">
       <div className="print-controls space-y-4">
+        <OnlineOnlyNotice>
+          Label printing and PDF export need a network connection in this version.
+        </OnlineOnlyNotice>
         <div>
           <h1 className="text-xl font-semibold text-porcelain-950">Barcode labels</h1>
           <p className="mt-1 text-sm text-porcelain-600">
@@ -389,96 +371,9 @@ export default function LabelsScreen() {
             </button>
           </div>
         </section>
-
-        <section className="space-y-3 rounded-xl border border-porcelain-200 bg-white p-3">
-          <h2 className="text-sm font-semibold tracking-wide text-porcelain-600 uppercase">
-            Browser print (secondary)
-          </h2>
-          <p className="text-xs text-porcelain-500">
-            On-screen preview and the browser Print dialog. The PDF template stays at 52.5 × 29.7 mm.
-          </p>
-          <div className="grid grid-cols-2 gap-3">
-            <LayoutField
-              id="label-width"
-              label="Width (mm)"
-              value={layout.widthMm}
-              bounds={LABEL_LAYOUT_BOUNDS.widthMm}
-              onChange={(widthMm) => patchLayout({ widthMm })}
-            />
-            <LayoutField
-              id="label-height"
-              label="Height (mm)"
-              value={layout.heightMm}
-              bounds={LABEL_LAYOUT_BOUNDS.heightMm}
-              onChange={(heightMm) => patchLayout({ heightMm })}
-            />
-            <LayoutField
-              id="label-margin"
-              label="Margin (mm)"
-              value={layout.marginMm}
-              bounds={LABEL_LAYOUT_BOUNDS.marginMm}
-              onChange={(marginMm) => patchLayout({ marginMm })}
-            />
-            <LayoutField
-              id="barcode-height"
-              label="Barcode height (mm)"
-              value={layout.barcodeHeightMm}
-              bounds={LABEL_LAYOUT_BOUNDS.barcodeHeightMm}
-              onChange={(barcodeHeightMm) => patchLayout({ barcodeHeightMm })}
-            />
-            <LayoutField
-              id="module-width"
-              label="Bar width (mm)"
-              value={layout.moduleMm}
-              bounds={LABEL_LAYOUT_BOUNDS.moduleMm}
-              onChange={(moduleMm) => patchLayout({ moduleMm })}
-            />
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setPrintPreview((value) => !value)}
-              className="flex-1 rounded-xl border border-porcelain-300 px-4 py-3 text-sm font-semibold text-porcelain-700"
-            >
-              Print preview
-            </button>
-            <button
-              type="button"
-              onClick={handlePrint}
-              disabled={printable.length === 0}
-              className="flex-1 rounded-xl border border-porcelain-300 px-4 py-3 text-sm font-semibold text-porcelain-700 disabled:text-porcelain-300"
-            >
-              Print
-            </button>
-          </div>
-          <p className="text-center text-xs text-porcelain-500">
-            {printable.length} {printable.length === 1 ? "label" : "labels"} · layout{" "}
-            {layout.widthMm}×{layout.heightMm} mm
-          </p>
-        </section>
       </div>
 
-      {printPreview && (
-        <div className="print-preview-toolbar flex gap-2 print:hidden">
-          <button
-            type="button"
-            onClick={() => setPrintPreview(false)}
-            className="flex-1 rounded-xl border border-porcelain-300 px-4 py-3 text-sm font-semibold text-porcelain-700"
-          >
-            Exit preview
-          </button>
-          <button
-            type="button"
-            onClick={handlePrint}
-            disabled={printable.length === 0}
-            className="flex-1 rounded-xl bg-porcelain-600 px-4 py-3 text-sm font-semibold text-white disabled:bg-porcelain-300"
-          >
-            Print
-          </button>
-        </div>
-      )}
-
-      <LabelSheet products={printable} layout={clampLayout(layout)} />
+      <LabelSheet products={printable} layout={DEFAULT_LABEL_LAYOUT} />
     </div>
   );
 }

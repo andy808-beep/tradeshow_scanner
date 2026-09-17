@@ -12,6 +12,11 @@ export interface ProductSearchResponse {
   products: Product[];
 }
 
+export interface ProductCatalogueResponse {
+  products: Product[];
+  count: number;
+}
+
 export interface ProductResponse {
   product: Product;
 }

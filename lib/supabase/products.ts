@@ -167,6 +167,37 @@ export async function listActiveProducts(query = ""): Promise<Product[]> {
   return (data ?? []).map(toProduct);
 }
 
+const CATALOGUE_PAGE_SIZE = 1000;
+
+/**
+ * Every active product, paginated. Used by the authenticated catalogue-sync
+ * endpoint so booth devices can store a complete offline copy.
+ */
+export async function listAllActiveProducts(): Promise<Product[]> {
+  const supabase = getAdminSupabase();
+  const products: Product[] = [];
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("products")
+      .select(COLUMNS)
+      .eq("active", true)
+      .order("product_code", { ascending: true })
+      .range(from, from + CATALOGUE_PAGE_SIZE - 1)
+      .returns<ProductRow[]>();
+
+    if (error) throw new DatabaseError(error.message);
+
+    const rows = data ?? [];
+    for (const row of rows) products.push(toProduct(row));
+    if (rows.length < CATALOGUE_PAGE_SIZE) break;
+    from += CATALOGUE_PAGE_SIZE;
+  }
+
+  return products;
+}
+
 /** Looks up the products referenced by an inquiry, keyed by id, active only. */
 export async function getActiveProductsByIds(
   ids: string[],

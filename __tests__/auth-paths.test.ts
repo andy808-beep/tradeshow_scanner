@@ -65,8 +65,8 @@ describe("path classification", () => {
   });
 
   it("does not redirect API requests to an HTML login page", () => {
-    expect(isApiPath("/api/products")).toBe(true);
-    expect(shouldRedirectUnauthenticatedPage("/api/products")).toBe(false);
+    expect(isApiPath("/api/products/catalogue")).toBe(true);
+    expect(shouldRedirectUnauthenticatedPage("/api/products/catalogue")).toBe(false);
     expect(shouldRedirectUnauthenticatedPage("/api/products/labels")).toBe(false);
   });
 

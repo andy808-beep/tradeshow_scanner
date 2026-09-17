@@ -1,4 +1,4 @@
-import { signOutAction } from "@/lib/auth/actions";
+import LogoutButton from "./logout-button";
 
 export default function SiteHeader({ email }: { email: string }) {
   return (
@@ -17,14 +17,7 @@ export default function SiteHeader({ email }: { email: string }) {
           >
             {email}
           </p>
-          <form action={signOutAction}>
-            <button
-              type="submit"
-              className="text-[11px] font-semibold tracking-wide text-white underline decoration-porcelain-300 underline-offset-2"
-            >
-              Log out
-            </button>
-          </form>
+          <LogoutButton />
         </div>
       </div>
     </header>

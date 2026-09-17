@@ -26,7 +26,7 @@ const CHARACTER_ENCODINGS = [
 
 const ASTERISK_ENCODING = 0x094;
 const WIDE_RATIO = 3;
-const QUIET_ZONE_MODULES = 10;
+export const QUIET_ZONE_MODULES = 10;
 
 export class Code39Error extends Error {
   constructor(message: string) {

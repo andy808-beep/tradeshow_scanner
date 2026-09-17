@@ -111,11 +111,14 @@ describe("print-only layout", () => {
 
     expect(screen.getByRole("button", { name: "Export PDF" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Calibration PDF" })).toBeEnabled();
-    expect(screen.getByText("A4 — 21 labels — 70 × 42.3 mm")).toBeVisible();
+    expect(screen.getByText("A4 — 40 labels — 52.5 × 29.7 mm")).toBeVisible();
+    expect(screen.queryByText("A4 — 21 labels — 70 × 42.3 mm")).toBeNull();
     expect(screen.queryByText("A4 — 10 labels — 105 × 57 mm")).toBeNull();
     expect(screen.queryByRole("combobox")).toBeNull();
-    expect(screen.getByLabelText("Start at label")).toHaveAttribute("max", "21");
+    expect(screen.getByLabelText("Start at label")).toHaveAttribute("max", "40");
     expect(screen.getByLabelText("Start at label")).toHaveAttribute("min", "1");
+    expect(screen.getByText(/positions 1–40/i)).toBeVisible();
+    expect(screen.getByText(/The PDF template stays at 52.5 × 29.7 mm/)).toBeVisible();
     expect(screen.getByLabelText("Start at label")).toBeVisible();
     expect(screen.getByLabelText("Horizontal offset (mm)")).toBeVisible();
     expect(screen.getByLabelText("Vertical offset (mm)")).toBeVisible();
@@ -189,6 +192,55 @@ describe("selection and copies in the page", () => {
 
     await waitFor(() => {
       expect(container.querySelectorAll("[data-product-code='K10188-13']").length).toBe(3);
+    });
+  });
+
+  it("keeps the copies list to about five rows and scrolls extra products", async () => {
+    const catalogue = Array.from({ length: 8 }, (_, index) => ({
+      ...K10188,
+      id: `00000000-0000-4000-8000-00000000000${index}`,
+      code: `K1018${index}-13`,
+      nameZh: `超长中文名称用于确认截断不会把区块撑宽 ${index}`,
+      nameEn: `Very long English name that must truncate without widening the section ${index}`,
+    }));
+    mocks.listLabelProductsRequest.mockResolvedValue(catalogue);
+
+    const { container } = render(<LabelsScreen />);
+    await waitFor(() => expect(screen.getByLabelText("Select K10180-13")).toBeTruthy());
+
+    await act(async () => {
+      screen.getByRole("button", { name: "Select all search results" }).click();
+    });
+
+    expect(screen.getByRole("heading", { name: "Copies per product" })).toBeVisible();
+    expect(screen.getByText("8 products")).toBeVisible();
+
+    const scroller = container.querySelector("[data-copies-scroll]");
+    expect(scroller).toBeTruthy();
+    expect(scroller).toHaveClass("max-h-[17rem]");
+    expect(scroller).toHaveClass("overflow-y-auto");
+    expect(scroller).toHaveClass("overflow-x-hidden");
+    expect(scroller).toHaveClass("overscroll-contain");
+    expect(scroller).toHaveClass("border");
+
+    const heading = screen.getByRole("heading", { name: "Copies per product" });
+    expect(scroller?.contains(heading)).toBe(false);
+    expect(scroller?.textContent).not.toContain("8 products");
+
+    expect(screen.getByLabelText("Copies of K10180-13")).toBeVisible();
+    expect(screen.getByLabelText("Copies of K10187-13")).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("Copies of K10182-13"), {
+        target: { value: "4" },
+      });
+    });
+    expect((screen.getByLabelText("Copies of K10182-13") as HTMLInputElement).value).toBe("4");
+    expect((screen.getByLabelText("Copies of K10180-13") as HTMLInputElement).value).toBe("1");
+
+    await waitFor(() => {
+      expect(container.querySelectorAll("[data-product-code='K10182-13']").length).toBe(4);
+      expect(container.querySelectorAll("[data-product-code='K10180-13']").length).toBe(1);
     });
   });
 });

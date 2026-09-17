@@ -1,9 +1,9 @@
 /**
- * Physical A4 sticker layout. Gaps and the 0.45 mm top margin are initial
- * assumptions — the sheet has not been printer-calibrated yet.
+ * Physical A4 sticker layout. Zero margins and gaps are initial assumptions —
+ * the sheet has not been printer-calibrated yet.
  *
- * Seven 42.3 mm rows use 296.1 mm of A4 height (297 − 296.1 = 0.9 mm), so
- * ~0.45 mm sits at the top and bottom when offsets are zero.
+ * Four 52.5 mm columns fill the 210 mm page width. Ten 29.7 mm rows fill the
+ * 297 mm page height.
  */
 
 export const PDF_POINTS_PER_INCH = 72;
@@ -33,24 +33,24 @@ export interface LabelPdfTemplate {
   topMarginMm: number;
 }
 
-export const A4_21_LABELS_70x42: LabelPdfTemplate = {
-  id: "a4-21-70x42",
-  name: "A4 — 21 labels — 70 × 42.3 mm",
+export const A4_40_LABELS_52x29: LabelPdfTemplate = {
+  id: "a4-40-52x29",
+  name: "A4 — 40 labels — 52.5 × 29.7 mm",
   pageWidthMm: 210,
   pageHeightMm: 297,
-  columns: 3,
-  rows: 7,
-  labelWidthMm: 70,
-  labelHeightMm: 42.3,
+  columns: 4,
+  rows: 10,
+  labelWidthMm: 52.5,
+  labelHeightMm: 29.7,
   columnGapMm: 0,
   rowGapMm: 0,
   leftMarginMm: 0,
-  topMarginMm: 0.45,
+  topMarginMm: 0,
 };
 
-export const LABEL_PDF_TEMPLATE = A4_21_LABELS_70x42;
+export const LABEL_PDF_TEMPLATE = A4_40_LABELS_52x29;
 
-export function labelsPerPage(template: LabelPdfTemplate = A4_21_LABELS_70x42): number {
+export function labelsPerPage(template: LabelPdfTemplate = A4_40_LABELS_52x29): number {
   return template.columns * template.rows;
 }
 
@@ -59,10 +59,10 @@ export interface LabelPdfSettings {
   offsetXMm: number;
   /** Extra vertical shift of the whole grid, millimetres. May be negative. */
   offsetYMm: number;
-  /** Inset inside each label, millimetres. */
+  /** Inset on the text block, millimetres. */
   paddingMm: number;
   barcodeHeightMm: number;
-  /** Narrow-bar width, millimetres. */
+  /** Preferred narrow-bar width, millimetres. Never drawn below 0.25 mm. */
   moduleMm: number;
   /** 1-based position on the first sheet to start filling. */
   startAt: number;
@@ -71,8 +71,8 @@ export interface LabelPdfSettings {
 export const DEFAULT_LABEL_PDF_SETTINGS: LabelPdfSettings = {
   offsetXMm: 0,
   offsetYMm: 0,
-  paddingMm: 3,
-  barcodeHeightMm: 16,
+  paddingMm: 2.5,
+  barcodeHeightMm: 12,
   moduleMm: 0.25,
   startAt: 1,
 };
@@ -80,11 +80,39 @@ export const DEFAULT_LABEL_PDF_SETTINGS: LabelPdfSettings = {
 export const LABEL_PDF_BOUNDS = {
   offsetXMm: { min: -10, max: 10, step: 0.1 },
   offsetYMm: { min: -10, max: 10, step: 0.1 },
-  paddingMm: { min: 1.5, max: 8, step: 0.5 },
-  barcodeHeightMm: { min: 8, max: 28, step: 0.5 },
-  moduleMm: { min: 0.15, max: 0.5, step: 0.05 },
-  startAt: { min: 1, max: 21, step: 1 },
+  paddingMm: { min: 2, max: 3, step: 0.1 },
+  barcodeHeightMm: { min: 10, max: 13, step: 0.5 },
+  moduleMm: { min: 0.25, max: 0.5, step: 0.01 },
+  startAt: { min: 1, max: 40, step: 1 },
 } as const;
+
+/** Barcode may sit closer to the die-cut than body text so it can fill the label. */
+export const BARCODE_HORIZONTAL_INSET_MM = 1.5;
+
+export const START_AT_MIN = LABEL_PDF_BOUNDS.startAt.min;
+export const START_AT_MAX = LABEL_PDF_BOUNDS.startAt.max;
+
+export class LabelPdfError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "LabelPdfError";
+  }
+}
+
+export function parseStartAt(value: number): number {
+  if (!Number.isFinite(value)) {
+    throw new LabelPdfError(
+      `Start at label must be a whole number from ${START_AT_MIN} to ${START_AT_MAX}.`,
+    );
+  }
+  const startAt = Math.round(value);
+  if (startAt < START_AT_MIN || startAt > START_AT_MAX) {
+    throw new LabelPdfError(
+      `Start at label must be between ${START_AT_MIN} and ${START_AT_MAX}.`,
+    );
+  }
+  return startAt;
+}
 
 function clamp(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min;
@@ -93,9 +121,6 @@ function clamp(value: number, min: number, max: number): number {
 
 export function clampPdfSettings(settings: LabelPdfSettings): LabelPdfSettings {
   const bounds = LABEL_PDF_BOUNDS;
-  const startAt = Math.round(
-    clamp(settings.startAt, bounds.startAt.min, bounds.startAt.max),
-  );
   return {
     offsetXMm: clamp(settings.offsetXMm, bounds.offsetXMm.min, bounds.offsetXMm.max),
     offsetYMm: clamp(settings.offsetYMm, bounds.offsetYMm.min, bounds.offsetYMm.max),
@@ -106,7 +131,7 @@ export function clampPdfSettings(settings: LabelPdfSettings): LabelPdfSettings {
       bounds.barcodeHeightMm.max,
     ),
     moduleMm: clamp(settings.moduleMm, bounds.moduleMm.min, bounds.moduleMm.max),
-    startAt,
+    startAt: Number.isFinite(settings.startAt) ? Math.round(settings.startAt) : START_AT_MIN,
   };
 }
 
@@ -117,11 +142,11 @@ export interface LabelRectMm {
   heightMm: number;
 }
 
-/** 1-based position on a 3×7 sheet. */
+/** 1-based position on a 4×10 sheet, left-to-right then top-to-bottom. */
 export function labelRectMm(
   position: number,
   settings: Pick<LabelPdfSettings, "offsetXMm" | "offsetYMm">,
-  template: LabelPdfTemplate = A4_21_LABELS_70x42,
+  template: LabelPdfTemplate = A4_40_LABELS_52x29,
 ): LabelRectMm {
   const index = position - 1;
   const col = index % template.columns;
@@ -138,6 +163,14 @@ export function labelRectMm(
     widthMm: template.labelWidthMm,
     heightMm: template.labelHeightMm,
   };
+}
+
+export function barcodeAvailableWidthMm(
+  template: LabelPdfTemplate = A4_40_LABELS_52x29,
+  paddingMm: number = DEFAULT_LABEL_PDF_SETTINGS.paddingMm,
+): number {
+  const inset = Math.min(paddingMm, BARCODE_HORIZONTAL_INSET_MM);
+  return template.labelWidthMm - 2 * inset;
 }
 
 export interface LabelPdfProduct {
@@ -174,10 +207,10 @@ export interface LabelPageSlot<T> {
 export function paginateLabelSlots<T>(
   products: T[],
   startAt: number,
-  template: LabelPdfTemplate = A4_21_LABELS_70x42,
+  template: LabelPdfTemplate = A4_40_LABELS_52x29,
 ): LabelPageSlot<T>[][] {
   const perPage = labelsPerPage(template);
-  const origin = clamp(Math.round(startAt), 1, perPage);
+  const origin = parseStartAt(startAt);
   if (products.length === 0) return [];
 
   const pages: LabelPageSlot<T>[][] = [];
@@ -225,5 +258,7 @@ export const LABEL_PDF_FONT_LICENSE = "SIL Open Font License 1.1";
 export const LABEL_PDF_FONT_SOURCE =
   "Fontsource Noto Sans SC 400 chinese-simplified (Google Fonts / Adobe Source Han Sans)";
 export const CALIBRATION_TEST_CODE = "K10188-13";
+/** Longest typical Koei catalogue code in the current data set (9 characters). */
+export const CALIBRATION_LONG_CODE = "K9426S-19";
 export const PRODUCTION_PDF_SUBJECT = "PRODUCTION_LABELS";
 export const CALIBRATION_PDF_SUBJECT = "CALIBRATION_SHEET";

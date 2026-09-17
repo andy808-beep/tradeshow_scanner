@@ -12,7 +12,7 @@ import {
   type LabelSelectionItem,
 } from "@/lib/label-layout";
 import {
-  A4_21_LABELS_70x42,
+  A4_40_LABELS_52x29,
   clampPdfSettings,
   DEFAULT_LABEL_PDF_SETTINGS,
   LABEL_PDF_BOUNDS,
@@ -127,6 +127,13 @@ export default function LabelsScreen() {
               settings: pdfSettings,
               fontBytes,
             });
+      if (result.plan.skippedCodes.length > 0) {
+        setPdfError(result.plan.skippedCodes.map((item) => item.message).join(" "));
+      }
+      const hasPrintedLabels = result.plan.slots.some((slot) => slot.productCode);
+      if (mode === "production" && !hasPrintedLabels) {
+        return;
+      }
       downloadPdfBytes(
         result.bytes,
         mode === "calibration" ? "koei-label-calibration.pdf" : "koei-labels.pdf",
@@ -231,16 +238,36 @@ export default function LabelsScreen() {
 
         {selected.length > 0 && (
           <section className="space-y-2 rounded-xl border border-porcelain-200 bg-white p-3">
-            <h2 className="text-sm font-semibold tracking-wide text-porcelain-600 uppercase">
-              Copies per product
-            </h2>
-            <ul className="space-y-2">
+            <div className="flex items-baseline justify-between gap-3">
+              <h2
+                id="copies-heading"
+                className="text-sm font-semibold tracking-wide text-porcelain-600 uppercase"
+              >
+                Copies per product
+              </h2>
+              <p className="shrink-0 text-xs text-porcelain-500">
+                {selected.length} {selected.length === 1 ? "product" : "products"}
+              </p>
+            </div>
+            <ul
+              aria-labelledby="copies-heading"
+              data-copies-scroll=""
+              className="copies-scroll max-h-[17rem] space-y-1 overflow-x-hidden overflow-y-auto overscroll-contain touch-pan-y rounded-lg border border-porcelain-200 bg-porcelain-50 p-2"
+            >
               {selected.map((item) => (
-                <li key={item.product.id} className="flex items-center justify-between gap-3">
-                  <span className="min-w-0 truncate font-mono text-xs font-semibold text-porcelain-700">
-                    {item.product.code}
+                <li
+                  key={item.product.id}
+                  className="flex min-w-0 items-center gap-2 py-1"
+                >
+                  <span className="min-w-0 flex-1 overflow-hidden">
+                    <span className="block truncate font-mono text-xs font-semibold text-porcelain-700">
+                      {item.product.code}
+                    </span>
+                    <span className="block truncate text-xs text-porcelain-600">
+                      {productTitle(item.product)}
+                    </span>
                   </span>
-                  <label className="flex items-center gap-2 text-sm text-porcelain-600">
+                  <label className="flex shrink-0 items-center gap-2 text-sm text-porcelain-600">
                     Copies
                     <input
                       type="number"
@@ -275,11 +302,15 @@ export default function LabelsScreen() {
             PDF export
           </h2>
           <p className="text-xs text-porcelain-500">
-            Print-ready A4 PDF. Template size is fixed to the sticker sheet;
-            offsets are for printer calibration and have not been measured on the
-            physical product yet.
+            Print-ready A4 PDF, 4 columns × 10 rows. Template size is fixed to
+            the sticker sheet; offsets are for printer calibration and have not
+            been measured on the physical product yet.
           </p>
-          <p className="text-sm font-medium text-porcelain-900">{A4_21_LABELS_70x42.name}</p>
+          <p className="text-sm font-medium text-porcelain-900">{A4_40_LABELS_52x29.name}</p>
+          <p className="text-xs text-porcelain-500">
+            Start at label accepts positions 1–40, counted left to right then top
+            to bottom. Earlier positions on the first sheet stay blank.
+          </p>
           <div className="grid grid-cols-2 gap-3">
             <LayoutField
               id="pdf-start-at"
@@ -364,7 +395,7 @@ export default function LabelsScreen() {
             Browser print (secondary)
           </h2>
           <p className="text-xs text-porcelain-500">
-            On-screen preview and the browser Print dialog. The PDF template stays at 70 × 42.3 mm.
+            On-screen preview and the browser Print dialog. The PDF template stays at 52.5 × 29.7 mm.
           </p>
           <div className="grid grid-cols-2 gap-3">
             <LayoutField

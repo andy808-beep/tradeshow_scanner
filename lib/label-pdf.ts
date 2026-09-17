@@ -11,15 +11,24 @@ import {
   type PDFPage,
 } from "pdf-lib";
 import { isCode39Compatible } from "./code39";
-import { code39BarRects, fitCode39ModuleMm } from "./code39-bars";
 import {
-  A4_21_LABELS_70x42,
+  code39BarRects,
+  describeUnsafeBarcode,
+  fitCode39ForLabel,
+  MIN_NARROW_BAR_MM,
+  type Code39LabelFit,
+} from "./code39-bars";
+import {
+  A4_40_LABELS_52x29,
+  barcodeAvailableWidthMm,
+  CALIBRATION_LONG_CODE,
   CALIBRATION_PDF_SUBJECT,
   CALIBRATION_TEST_CODE,
   clampPdfSettings,
   labelRectMm,
   mmToPt,
   paginateLabelSlots,
+  parseStartAt,
   PRODUCTION_PDF_SUBJECT,
   ptToMm,
   type LabelPdfProduct,
@@ -46,6 +55,12 @@ export interface LabelSlotReport {
   productCode: string | null;
   rect: LabelRectMm;
   boxes: DrawnElementBox[];
+  barcode?: {
+    encodedValue: string;
+    moduleMm: number;
+    widthMm: number;
+    quietZoneMm: number;
+  };
 }
 
 export interface LabelPdfPlan {
@@ -56,6 +71,7 @@ export interface LabelPdfPlan {
   pageCount: number;
   calibrationMarks: boolean;
   markTexts: string[];
+  skippedCodes: Array<{ code: string; message: string }>;
   slots: LabelSlotReport[];
 }
 
@@ -86,23 +102,6 @@ function clipToMm(page: PDFPage, pageHeightMm: number, rect: LabelRectMm) {
 
 function unclip(page: PDFPage) {
   page.pushOperators(popGraphicsState());
-}
-
-function wrapText(text: string, font: PDFFont, sizePt: number, maxWidthPt: number): string[] {
-  if (text === "") return [];
-  const lines: string[] = [];
-  let current = "";
-  for (const character of text) {
-    const next = current + character;
-    if (font.widthOfTextAtSize(next, sizePt) <= maxWidthPt || current === "") {
-      current = next;
-      continue;
-    }
-    lines.push(current);
-    current = character;
-  }
-  if (current) lines.push(current);
-  return lines;
 }
 
 function ellipsize(text: string, font: PDFFont, sizePt: number, maxWidthPt: number): string {
@@ -155,6 +154,42 @@ function drawTextMm(
   });
 }
 
+function barcodeAreaForLabel(
+  rect: LabelRectMm,
+  paddingMm: number,
+  template: LabelPdfTemplate,
+): LabelRectMm {
+  const inset = (template.labelWidthMm - barcodeAvailableWidthMm(template, paddingMm)) / 2;
+  return {
+    xMm: rect.xMm + inset,
+    yMmFromTop: rect.yMmFromTop + Math.min(paddingMm, 1.2),
+    widthMm: barcodeAvailableWidthMm(template, paddingMm),
+    heightMm: rect.heightMm,
+  };
+}
+
+export function barcodeFitForProduct(
+  code: string,
+  settings: LabelPdfSettings,
+  template: LabelPdfTemplate = A4_40_LABELS_52x29,
+): Code39LabelFit {
+  if (!isCode39Compatible(code)) {
+    return {
+      ok: false,
+      code,
+      requiredWidthMm: 0,
+      availableWidthMm: barcodeAvailableWidthMm(template, settings.paddingMm),
+      minModuleMm: MIN_NARROW_BAR_MM,
+    };
+  }
+  return fitCode39ForLabel(
+    code,
+    barcodeAvailableWidthMm(template, settings.paddingMm),
+    settings.moduleMm,
+    MIN_NARROW_BAR_MM,
+  );
+}
+
 function drawBarcodeInLabel(
   page: PDFPage,
   pageHeightMm: number,
@@ -162,9 +197,11 @@ function drawBarcodeInLabel(
   content: LabelRectMm,
   settings: LabelPdfSettings,
   boxes: DrawnElementBox[],
-): number {
-  const moduleMm = fitCode39ModuleMm(code, settings.moduleMm, content.widthMm);
-  const { widthMm, bars } = code39BarRects(code, moduleMm);
+): { heightMm: number; fit: Extract<Code39LabelFit, { ok: true }> } | null {
+  const fit = fitCode39ForLabel(code, content.widthMm, settings.moduleMm, MIN_NARROW_BAR_MM);
+  if (!fit.ok) return null;
+
+  const { widthMm, bars } = code39BarRects(code, fit.moduleMm);
   const heightMm = Math.min(settings.barcodeHeightMm, content.heightMm);
   const xMm = content.xMm + (content.widthMm - widthMm) / 2;
   const yMmFromTop = content.yMmFromTop;
@@ -189,7 +226,7 @@ function drawBarcodeInLabel(
     });
   }
 
-  return heightMm;
+  return { heightMm, fit: { ...fit, widthMm } };
 }
 
 function drawProductLabel(
@@ -199,63 +236,68 @@ function drawProductLabel(
   product: LabelPdfProduct,
   rect: LabelRectMm,
   settings: LabelPdfSettings,
+  template: LabelPdfTemplate,
   boxes: DrawnElementBox[],
-) {
+): LabelSlotReport["barcode"] {
+  const textPad = settings.paddingMm;
   const content: LabelRectMm = {
-    xMm: rect.xMm + settings.paddingMm,
-    yMmFromTop: rect.yMmFromTop + settings.paddingMm,
-    widthMm: Math.max(rect.widthMm - 2 * settings.paddingMm, 1),
-    heightMm: Math.max(rect.heightMm - 2 * settings.paddingMm, 1),
+    xMm: rect.xMm + textPad,
+    yMmFromTop: rect.yMmFromTop + textPad,
+    widthMm: Math.max(rect.widthMm - 2 * textPad, 1),
+    heightMm: Math.max(rect.heightMm - 2 * textPad, 1),
   };
 
   clipToMm(page, pageHeightMm, rect);
 
   let cursorMm = content.yMmFromTop;
+  let barcodeMeta: LabelSlotReport["barcode"];
+  const barcodeBox = barcodeAreaForLabel(rect, settings.paddingMm, template);
+  barcodeBox.heightMm = Math.min(settings.barcodeHeightMm, content.heightMm);
+  barcodeBox.yMmFromTop = content.yMmFromTop;
+
   if (isCode39Compatible(product.code)) {
-    const barcodeHeight = drawBarcodeInLabel(
+    const drawn = drawBarcodeInLabel(
       page,
       pageHeightMm,
       product.code,
-      content,
+      barcodeBox,
       settings,
       boxes,
     );
-    cursorMm += barcodeHeight + 1.2;
+    if (drawn) {
+      barcodeMeta = {
+        encodedValue: product.code,
+        moduleMm: drawn.fit.moduleMm,
+        widthMm: drawn.fit.widthMm,
+        quietZoneMm: drawn.fit.quietZoneMm,
+      };
+      cursorMm += drawn.heightMm + 0.6;
+    }
   }
 
-  const sizeCode = 8;
-  const sizeZh = 9;
-  const sizeEn = 7;
-  const sizeDim = 7;
+  const sizeCode = 7;
+  const sizeZh = 6.5;
+  const sizeDim = 5.5;
   const maxWidthPt = mmToPt(content.widthMm);
   const bottomLimit = content.yMmFromTop + content.heightMm;
 
-  const writeBlock = (text: string | null, sizePt: number, gapMm: number, maxLines: number) => {
+  const writeLine = (text: string | null, sizePt: number, gapMm: number) => {
     if (!text) return;
-    const lines = wrapText(text, font, sizePt, maxWidthPt).slice(0, maxLines);
-    if (lines.length === maxLines) {
-      const original = wrapText(text, font, sizePt, maxWidthPt);
-      if (original.length > maxLines) {
-        lines[maxLines - 1] = ellipsize(lines[maxLines - 1], font, sizePt, maxWidthPt);
-      }
-    }
-    for (const line of lines) {
-      const lineHeightMm = ptToMm(sizePt);
-      if (cursorMm + lineHeightMm > bottomLimit + 0.01) return;
-      drawTextMm(page, pageHeightMm, font, line, content.xMm, cursorMm, sizePt, boxes);
-      cursorMm += lineHeightMm + gapMm;
-    }
+    const line = ellipsize(text, font, sizePt, maxWidthPt);
+    const lineHeightMm = ptToMm(sizePt);
+    if (cursorMm + lineHeightMm > bottomLimit + 0.01) return;
+    drawTextMm(page, pageHeightMm, font, line, content.xMm, cursorMm, sizePt, boxes);
+    cursorMm += lineHeightMm + gapMm;
   };
 
-  writeBlock(product.code, sizeCode, 0.4, 1);
-  writeBlock(product.nameZh, sizeZh, 0.3, 2);
-  writeBlock(product.nameEn, sizeEn, 0.3, 2);
+  writeLine(product.code, sizeCode, 0.25);
+  writeLine(product.nameZh, sizeZh, 0.2);
 
   if (product.dimensions) {
     const lineHeightMm = ptToMm(sizeDim);
     const yMmFromTop = Math.min(
       bottomLimit - lineHeightMm,
-      Math.max(cursorMm + 0.4, bottomLimit - lineHeightMm),
+      Math.max(cursorMm + 0.2, bottomLimit - lineHeightMm),
     );
     if (yMmFromTop + lineHeightMm <= rect.yMmFromTop + rect.heightMm + 0.01) {
       const line = ellipsize(product.dimensions, font, sizeDim, maxWidthPt);
@@ -264,6 +306,7 @@ function drawProductLabel(
   }
 
   unclip(page);
+  return barcodeMeta;
 }
 
 function drawCalibrationMarks(
@@ -361,10 +404,25 @@ export async function generateProductionLabelPdf({
   products,
   settings: rawSettings,
   fontBytes,
-  template = A4_21_LABELS_70x42,
+  template = A4_40_LABELS_52x29,
 }: GenerateLabelPdfOptions): Promise<LabelPdfResult> {
-  const settings = clampPdfSettings(rawSettings);
-  const pages = paginateLabelSlots(products, settings.startAt, template);
+  parseStartAt(rawSettings.startAt);
+  const settings = { ...clampPdfSettings(rawSettings), startAt: parseStartAt(rawSettings.startAt) };
+  const skippedCodes: Array<{ code: string; message: string }> = [];
+  const printable: LabelPdfProduct[] = [];
+  for (const product of products) {
+    const fit = barcodeFitForProduct(product.code, settings, template);
+    if (!fit.ok) {
+      skippedCodes.push({
+        code: product.code,
+        message: describeUnsafeBarcode(product.code, fit.minModuleMm),
+      });
+      continue;
+    }
+    printable.push(product);
+  }
+
+  const pages = paginateLabelSlots(printable, settings.startAt, template);
   const { pdf, font } = await createDocument(
     fontBytes,
     template,
@@ -388,8 +446,18 @@ export async function generateProductionLabelPdf({
     for (const slot of pageSlots) {
       const rect = labelRectMm(slot.position, settings, template);
       const boxes: DrawnElementBox[] = [];
+      let barcode: LabelSlotReport["barcode"];
       if (slot.product) {
-        drawProductLabel(page, template.pageHeightMm, font, slot.product, rect, settings, boxes);
+        barcode = drawProductLabel(
+          page,
+          template.pageHeightMm,
+          font,
+          slot.product,
+          rect,
+          settings,
+          template,
+          boxes,
+        );
       }
       slots.push({
         pageIndex,
@@ -397,6 +465,7 @@ export async function generateProductionLabelPdf({
         productCode: slot.product?.code ?? null,
         rect,
         boxes,
+        barcode,
       });
     }
   }
@@ -411,6 +480,7 @@ export async function generateProductionLabelPdf({
       pageCount: pdf.getPageCount(),
       calibrationMarks: false,
       markTexts: [],
+      skippedCodes,
       slots,
     },
   };
@@ -419,9 +489,10 @@ export async function generateProductionLabelPdf({
 export async function generateCalibrationLabelPdf({
   settings: rawSettings,
   fontBytes,
-  template = A4_21_LABELS_70x42,
+  template = A4_40_LABELS_52x29,
 }: Omit<GenerateLabelPdfOptions, "products">): Promise<LabelPdfResult> {
-  const settings = clampPdfSettings(rawSettings);
+  parseStartAt(rawSettings.startAt);
+  const settings = { ...clampPdfSettings(rawSettings), startAt: parseStartAt(rawSettings.startAt) };
   const { pdf, font } = await createDocument(
     fontBytes,
     template,
@@ -443,43 +514,52 @@ export async function generateCalibrationLabelPdf({
 
   const slots: LabelSlotReport[] = [];
   const perPage = template.columns * template.rows;
+  const sampleCodes: Record<number, string> = {
+    1: CALIBRATION_TEST_CODE,
+    2: CALIBRATION_LONG_CODE,
+  };
 
   for (let position = 1; position <= perPage; position += 1) {
     const rect = labelRectMm(position, settings, template);
     const boxes: DrawnElementBox[] = [];
     drawLabelOutline(page, template.pageHeightMm, rect);
     const label = String(position);
-    const sizePt = 14;
+    const sizePt = 7;
     const textWidthMm = ptToMm(font.widthOfTextAtSize(label, sizePt));
-    const xMm = rect.xMm + rect.widthMm - settings.paddingMm - textWidthMm;
-    const yMmFromTop = rect.yMmFromTop + settings.paddingMm;
+    const xMm = rect.xMm + rect.widthMm - 1.2 - textWidthMm;
+    const yMmFromTop = rect.yMmFromTop + 0.8;
     drawTextMm(page, template.pageHeightMm, font, label, xMm, yMmFromTop, sizePt, boxes);
 
-    if (position === 1) {
-      const barcodeArea: LabelRectMm = {
-        xMm: rect.xMm + settings.paddingMm,
-        yMmFromTop: rect.yMmFromTop + settings.paddingMm + 8,
-        widthMm: Math.max(rect.widthMm - 2 * settings.paddingMm, 1),
-        heightMm: Math.max(rect.heightMm - 2 * settings.paddingMm - 8, 1),
-      };
+    const sampleCode = sampleCodes[position];
+    let barcode: LabelSlotReport["barcode"];
+    if (sampleCode && isCode39Compatible(sampleCode)) {
+      const barcodeBox = barcodeAreaForLabel(rect, settings.paddingMm, template);
+      barcodeBox.yMmFromTop = rect.yMmFromTop + 4;
+      barcodeBox.heightMm = Math.min(settings.barcodeHeightMm, rect.heightMm - 8);
       clipToMm(page, template.pageHeightMm, rect);
-      if (isCode39Compatible(CALIBRATION_TEST_CODE)) {
-        const barcodeHeight = drawBarcodeInLabel(
-          page,
-          template.pageHeightMm,
-          CALIBRATION_TEST_CODE,
-          barcodeArea,
-          settings,
-          boxes,
-        );
+      const drawn = drawBarcodeInLabel(
+        page,
+        template.pageHeightMm,
+        sampleCode,
+        barcodeBox,
+        settings,
+        boxes,
+      );
+      if (drawn) {
+        barcode = {
+          encodedValue: sampleCode,
+          moduleMm: drawn.fit.moduleMm,
+          widthMm: drawn.fit.widthMm,
+          quietZoneMm: drawn.fit.quietZoneMm,
+        };
         drawTextMm(
           page,
           template.pageHeightMm,
           font,
-          CALIBRATION_TEST_CODE,
-          barcodeArea.xMm,
-          barcodeArea.yMmFromTop + barcodeHeight + 1,
-          8,
+          sampleCode,
+          rect.xMm + settings.paddingMm,
+          barcodeBox.yMmFromTop + drawn.heightMm + 0.4,
+          6,
           boxes,
         );
       }
@@ -489,9 +569,10 @@ export async function generateCalibrationLabelPdf({
     slots.push({
       pageIndex: 0,
       position,
-      productCode: position === 1 ? CALIBRATION_TEST_CODE : null,
+      productCode: sampleCode ?? null,
       rect,
       boxes,
+      barcode,
     });
   }
 
@@ -507,6 +588,7 @@ export async function generateCalibrationLabelPdf({
       markTexts: markBoxes
         .map((box) => box.text)
         .filter((text): text is string => Boolean(text)),
+      skippedCodes: [],
       slots,
     },
   };

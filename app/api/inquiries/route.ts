@@ -3,13 +3,14 @@ import {
   validateCreateInquiry,
   type CreateInquiryResponse,
 } from "@/lib/api-contract";
-import { errorResponse, handleRouteError } from "@/lib/api-response";
+import { withAuthenticatedApi } from "@/lib/auth/api";
+import { errorResponse } from "@/lib/api-response";
 import { createInquiry } from "@/lib/supabase/inquiries";
 
 export const dynamic = "force-dynamic";
 
 /** POST /api/inquiries — validates the submission and saves it through the RPC. */
-export async function POST(request: Request) {
+export const POST = withAuthenticatedApi(async (request: Request) => {
   let body: unknown;
   try {
     body = await request.json();
@@ -22,10 +23,6 @@ export async function POST(request: Request) {
     return errorResponse("The inquiry could not be saved.", 400, validation.errors);
   }
 
-  try {
-    const inquiryId = await createInquiry(validation.value);
-    return NextResponse.json<CreateInquiryResponse>({ inquiryId }, { status: 201 });
-  } catch (error) {
-    return handleRouteError(error);
-  }
-}
+  const inquiryId = await createInquiry(validation.value);
+  return NextResponse.json<CreateInquiryResponse>({ inquiryId }, { status: 201 });
+});

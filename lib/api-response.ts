@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { ApiErrorResponse } from "./api-contract";
+import { AuthenticationError, AuthorizationError } from "./auth/errors";
 import {
   DatabaseError,
   InquiryValidationError,
@@ -7,6 +8,8 @@ import {
 } from "./supabase/errors";
 
 export const DATABASE_UNAVAILABLE = "The product database is not available.";
+export const AUTHENTICATION_REQUIRED = "Authentication required.";
+export const NOT_AUTHORIZED = "You are not allowed to access this resource.";
 
 export function errorResponse(
   message: string,
@@ -25,6 +28,14 @@ export function errorResponse(
  * never leak through an API response.
  */
 export function handleRouteError(error: unknown): NextResponse<ApiErrorResponse> {
+  if (error instanceof AuthenticationError) {
+    return errorResponse(AUTHENTICATION_REQUIRED, 401);
+  }
+
+  if (error instanceof AuthorizationError) {
+    return errorResponse(error.message || NOT_AUTHORIZED, 403);
+  }
+
   if (error instanceof InquiryValidationError) {
     return errorResponse(error.message, 400, error.details);
   }

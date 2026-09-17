@@ -1,10 +1,15 @@
 export const CATALOGUE_DB_NAME = "koei-tradeshow";
-export const CATALOGUE_DB_VERSION = 2;
+export const CATALOGUE_DB_VERSION = 3;
 export const PRODUCTS_STORE = "products";
 export const CODE_KEY_INDEX = "by-code-key";
 export const META_STORE = "meta";
+export const DRAFT_STORE = "inquiry-draft";
+export const OUTBOX_STORE = "inquiry-outbox";
 export const CATALOGUE_META_KEY = "catalogue";
 export const READINESS_META_KEY = "readiness";
+export const INQUIRY_SYNC_META_KEY = "inquiry-sync";
+export const DRAFT_RECORD_KEY = "current";
+export const INQUIRY_SUBMIT_TIMEOUT_MS = 15_000;
 
 /** Service-worker cache for the app shell only — never API responses. */
 export const SHELL_CACHE_NAME = "koei-shell-v1";

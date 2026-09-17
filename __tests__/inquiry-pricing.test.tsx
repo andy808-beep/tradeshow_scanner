@@ -1,6 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { InquiryProvider, useInquiry } from "@/components/inquiry-store";
+import { clearAllLocalData, resetCatalogueDbForTests } from "@/lib/offline/db";
 import {
   allLinesPriced,
   canSubmitInquiry,
@@ -36,15 +37,16 @@ const UNPRICED = product({
 });
 
 function line(overrides: Partial<InquiryLine> = {}): InquiryLine {
-  return { product: product(), quotedUnitPrice: 2.4, ...overrides };
+  return { product: product(), quotedUnitPrice: 2.4, notes: "", ...overrides };
 }
 
 function setup() {
   return renderHook(() => useInquiry(), { wrapper: InquiryProvider });
 }
 
-afterEach(() => {
-  // renderHook unmounts itself; nothing else is shared between tests.
+afterEach(async () => {
+  await clearAllLocalData();
+  resetCatalogueDbForTests();
 });
 
 describe("seeding the quoted price", () => {
@@ -312,7 +314,8 @@ describe("parsePriceInput", () => {
 });
 
 describe("a saved inquiry is locked until the next session starts", () => {
-  it("rejects edits after markSubmitted", () => {
+  it("rejects edits after the inquiry is saved", async () => {
+    Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
     const { result } = setup();
     const item = product();
 
@@ -320,14 +323,16 @@ describe("a saved inquiry is locked until the next session starts", () => {
       result.current.addProduct(item);
       result.current.updateCustomer({ name: "Ada", company: "Koei", notes: "Booth A" });
     });
-    act(() => {
-      result.current.markSubmitted("inquiry-1");
+    await act(async () => {
+      await result.current.saveInquiry();
     });
 
-    const snapshot = {
-      lines: result.current.lines,
-      customer: result.current.customer,
-    };
+    expect(result.current.confirmation).toMatchObject({
+      source: "queued",
+      customerName: "Ada",
+      companyName: "Koei",
+      productCount: 1,
+    });
 
     act(() => {
       result.current.setQuotedUnitPrice(item.id, 1);
@@ -336,23 +341,24 @@ describe("a saved inquiry is locked until the next session starts", () => {
       result.current.addProduct(UNPRICED);
     });
 
-    expect(result.current.confirmation).toEqual({
-      inquiryId: "inquiry-1",
-      customerName: "Ada",
-      companyName: "Koei",
-      productCount: 1,
+    expect(result.current.addProduct(UNPRICED)).toEqual({
+      ok: false,
+      reason: expect.stringMatching(/already been saved/i),
     });
-    expect(result.current.lines).toBe(snapshot.lines);
-    expect(result.current.customer).toEqual(snapshot.customer);
+    expect(result.current.confirmation?.customerName).toBe("Ada");
+    expect(result.current.lines).toEqual([]);
   });
 
-  it("clears the complete previous session on start next inquiry", () => {
+  it("clears the complete previous session on start next inquiry", async () => {
+    Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
     const { result } = setup();
 
     act(() => {
       result.current.addProduct(product());
       result.current.updateCustomer({ name: "Ada", company: "Koei", notes: "Booth A" });
-      result.current.markSubmitted("inquiry-1");
+    });
+    await act(async () => {
+      await result.current.saveInquiry();
     });
     act(() => {
       result.current.clearInquiry();
@@ -363,14 +369,21 @@ describe("a saved inquiry is locked until the next session starts", () => {
     expect(result.current.customer).toEqual({ name: "", company: "", notes: "" });
   });
 
-  it("lets the next inquiry reuse the same customer and company names", () => {
+  it("lets the next inquiry reuse the same customer and company names", async () => {
+    Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
     const { result } = setup();
 
     act(() => {
       result.current.addProduct(product());
       result.current.updateCustomer({ name: "Ada", company: "Koei" });
-      result.current.markSubmitted("inquiry-1");
+    });
+    await act(async () => {
+      await result.current.saveInquiry();
+    });
+    act(() => {
       result.current.clearInquiry();
+    });
+    act(() => {
       result.current.updateCustomer({ name: "Ada", company: "Koei" });
       result.current.addProduct(UNPRICED);
     });

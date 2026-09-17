@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { useAppPath } from "./app-path";
 import { useInquiry } from "./inquiry-store";
 
 function navClasses(isActive: boolean): string {
@@ -12,22 +11,38 @@ function navClasses(isActive: boolean): string {
 }
 
 export default function BottomNav() {
-  const pathname = usePathname();
+  const { path, navigate } = useAppPath();
   const { lines } = useInquiry();
 
-  const onInquiry = pathname === "/inquiry";
-  const onLabels = pathname === "/labels";
+  const onInquiry = path === "/inquiry";
+  const onLabels = path === "/labels";
   const onSearch = !onInquiry && !onLabels;
+
+  function handleNav(event: React.MouseEvent<HTMLAnchorElement>, href: string) {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    navigate(href);
+  }
 
   return (
     <nav className="print-chrome fixed inset-x-0 bottom-0 z-20 border-t border-porcelain-200 bg-white print:hidden">
+      {/* Native anchors keep tab switches on the cached shell. Next <Link> would fetch RSC. */}
       <div className="mx-auto flex max-w-md">
-        <Link href="/" className={navClasses(onSearch)} aria-current={onSearch ? "page" : undefined}>
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- client shell navigation */}
+        <a
+          href="/"
+          onClick={(event) => handleNav(event, "/")}
+          className={navClasses(onSearch)}
+          aria-current={onSearch ? "page" : undefined}
+        >
           <span aria-hidden>🔍</span>
           Search
-        </Link>
-        <Link
+        </a>
+        <a
           href="/inquiry"
+          onClick={(event) => handleNav(event, "/inquiry")}
           className={navClasses(onInquiry)}
           aria-current={onInquiry ? "page" : undefined}
         >
@@ -38,15 +53,16 @@ export default function BottomNav() {
               {lines.length}
             </span>
           )}
-        </Link>
-        <Link
+        </a>
+        <a
           href="/labels"
+          onClick={(event) => handleNav(event, "/labels")}
           className={navClasses(onLabels)}
           aria-current={onLabels ? "page" : undefined}
         >
           <span aria-hidden>🏷</span>
           Labels
-        </Link>
+        </a>
       </div>
     </nav>
   );

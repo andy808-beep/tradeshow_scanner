@@ -18,12 +18,16 @@ const mocks = vi.hoisted(() => ({
   replaceCatalogue: vi.fn(),
 }));
 
-vi.mock("@/lib/offline/db", () => ({
-  readCatalogueSnapshot: mocks.readCatalogueSnapshot,
-  readOfflineReadiness: mocks.readOfflineReadiness,
-  writeOfflineReadiness: mocks.writeOfflineReadiness,
-  replaceCatalogue: mocks.replaceCatalogue,
-}));
+vi.mock("@/lib/offline/db", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/offline/db")>();
+  return {
+    ...actual,
+    readCatalogueSnapshot: mocks.readCatalogueSnapshot,
+    readOfflineReadiness: mocks.readOfflineReadiness,
+    writeOfflineReadiness: mocks.writeOfflineReadiness,
+    replaceCatalogue: mocks.replaceCatalogue,
+  };
+});
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),

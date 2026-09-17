@@ -24,5 +24,8 @@ export const POST = withAuthenticatedApi(async (request: Request) => {
   }
 
   const inquiryId = await createInquiry(validation.value);
-  return NextResponse.json<CreateInquiryResponse>({ inquiryId }, { status: 201 });
+  return NextResponse.json<CreateInquiryResponse>(
+    { inquiryId },
+    { status: 201, headers: { "Cache-Control": "no-store" } },
+  );
 });

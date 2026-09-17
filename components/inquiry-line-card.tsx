@@ -15,15 +15,13 @@ export const NO_LISTED_PRICE_MESSAGE =
 export const PRICE_REQUIRED_MESSAGE = "Enter a quoted price before saving";
 
 export default function InquiryLineCard({ line }: { line: InquiryLine }) {
-  const { setQuotedUnitPrice, removeLine } = useInquiry();
+  const { setQuotedUnitPrice, setLineNotes, removeLine } = useInquiry();
   const [priceDraft, setPriceDraft] = useState<string | null>(null);
 
   const { product } = line;
   const storedPrice = line.quotedUnitPrice === null ? "" : String(line.quotedUnitPrice);
 
   const priced = isLinePriced(line);
-  // A product with no listed price starts blank, so name that cause explicitly
-  // rather than making it look like the employee deleted something.
   const priceError = priced
     ? null
     : product.unitPrice === null
@@ -109,6 +107,20 @@ export default function InquiryLineCard({ line }: { line: InquiryLine }) {
               {priceError}
             </p>
           )}
+        </div>
+
+        <div>
+          <label htmlFor={`notes-${product.id}`} className="mb-1 block text-sm text-porcelain-600">
+            Product notes
+          </label>
+          <textarea
+            id={`notes-${product.id}`}
+            value={line.notes}
+            onChange={(event) => setLineNotes(product.id, event.target.value)}
+            placeholder="Optional"
+            rows={2}
+            className="w-full resize-y rounded-lg border border-porcelain-300 bg-white px-3 py-2 text-sm text-porcelain-950 placeholder:text-porcelain-400 focus:border-porcelain-500 focus:ring-2 focus:ring-porcelain-200 focus:outline-none"
+          />
         </div>
       </div>
     </article>

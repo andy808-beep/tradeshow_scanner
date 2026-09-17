@@ -10,11 +10,11 @@ export default function LogoutButton() {
   const { clearInquiry } = useInquiry();
 
   async function handleLogout() {
+    clearInquiry();
     try {
       await clearConfidentialLocalData();
     } finally {
       resetLocal();
-      clearInquiry();
       await signOutAction();
     }
   }

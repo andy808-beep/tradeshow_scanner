@@ -26,6 +26,8 @@ export interface InquiryLine {
    * in that state.
    */
   quotedUnitPrice: number | null;
+  /** Optional product-specific notes. Empty string when none are entered. */
+  notes: string;
 }
 
 export interface CustomerDetails {

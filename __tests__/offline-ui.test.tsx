@@ -14,6 +14,8 @@ import {
   readCatalogueProducts,
   replaceCatalogue,
 } from "@/lib/offline/db";
+import { writeInquiryDraft, readInquiryDraft } from "@/lib/offline/inquiry-draft";
+import { enqueueOutboxSnapshot, listOutbox } from "@/lib/offline/inquiry-outbox";
 import type { Product } from "@/lib/types";
 
 const PRODUCT: Product = {
@@ -76,7 +78,7 @@ describe("online/offline status", () => {
   it("warns when no offline catalogue exists", async () => {
     renderCatalogue(<CatalogueStatus />);
     expect(await screen.findByText(LOOKUP_MESSAGES.unsynced, { exact: false })).toBeVisible();
-    expect(screen.getByText(/Anyone with this device can read cached prices/)).toBeVisible();
+    expect(screen.getByText(/Anyone with this unlocked authorized device can read cached prices/)).toBeVisible();
   });
 
   it("shows last synced time after a catalogue is stored", async () => {
@@ -165,13 +167,35 @@ describe("offline product details", () => {
 });
 
 describe("logout clearing IndexedDB", () => {
-  it("erases the local catalogue from the Log out button", async () => {
+  it("erases the local catalogue, draft and outbox from the Log out button", async () => {
     await replaceCatalogue([PRODUCT], { lastSyncedAt: Date.now(), count: 1 });
+    await writeInquiryDraft({
+      customer: { name: "Ada", company: "Koei", notes: "secret" },
+      currency: "USD",
+      lines: [{ product: PRODUCT, quotedUnitPrice: 2.4, notes: "line" }],
+      confirmation: null,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    await enqueueOutboxSnapshot(
+      {
+        customerName: "Ada",
+        companyName: "Koei",
+        notes: "secret",
+        currency: "USD",
+        clientSubmissionId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        items: [{ productId: PRODUCT.id, quotedPrice: 2.4, notes: "" }],
+      },
+      { customerName: "Ada", companyName: "Koei", productCount: 1, currency: "USD" },
+    );
+
     renderCatalogue(<LogoutButton />);
     fireEvent.click(screen.getByRole("button", { name: "Log out" }));
     await waitFor(async () => {
       expect(await readCatalogueMeta()).toBeNull();
       expect(await readCatalogueProducts()).toEqual([]);
+      expect(await readInquiryDraft()).toBeNull();
+      expect(await listOutbox()).toEqual([]);
     });
   });
 });

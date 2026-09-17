@@ -5,7 +5,7 @@ import type { Product } from "./types";
 export const SUPPORTED_CURRENCIES = [DEFAULT_CURRENCY] as const;
 
 export const MAX_INQUIRY_ITEMS = 200;
-const MAX_TEXT_LENGTH = 500;
+export const MAX_TEXT_LENGTH = 500;
 
 export interface ProductSearchResponse {
   products: Product[];
@@ -24,6 +24,7 @@ export interface InquiryItemRequest {
   productId: string;
   /** Required. Zero is allowed; absent, null and negative are not. */
   quotedPrice: number;
+  notes: string;
 }
 
 export interface CreateInquiryRequest {
@@ -32,6 +33,8 @@ export interface CreateInquiryRequest {
   notes: string;
   currency: string;
   items: InquiryItemRequest[];
+  /** Cryptographically random UUID generated on the device before first POST. */
+  clientSubmissionId: string;
 }
 
 export interface CreateInquiryResponse {
@@ -96,6 +99,13 @@ export function validateCreateInquiry(body: unknown): ValidationResult {
     errors.push(`Currency ${currency} is not supported.`);
   }
 
+  const clientSubmissionId = readText(body.clientSubmissionId);
+  if (clientSubmissionId === "") {
+    errors.push("A client submission id is required.");
+  } else if (!UUID_PATTERN.test(clientSubmissionId)) {
+    errors.push("Client submission id is not a valid UUID.");
+  }
+
   const rawItems = body.items;
   const items: InquiryItemRequest[] = [];
 
@@ -131,8 +141,13 @@ export function validateCreateInquiry(body: unknown): ValidationResult {
         quotedPrice = raw;
       }
 
+      const itemNotes = readText(rawItem.notes);
+      if (itemNotes.length > MAX_TEXT_LENGTH) {
+        errors.push(`${position} notes must be ${MAX_TEXT_LENGTH} characters or fewer.`);
+      }
+
       if (errors.length === 0) {
-        items.push({ productId, quotedPrice });
+        items.push({ productId, quotedPrice, notes: itemNotes });
       }
     });
 
@@ -146,6 +161,6 @@ export function validateCreateInquiry(body: unknown): ValidationResult {
 
   return {
     ok: true,
-    value: { customerName, companyName, notes, currency, items },
+    value: { customerName, companyName, notes, currency, items, clientSubmissionId },
   };
 }

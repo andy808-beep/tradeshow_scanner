@@ -41,7 +41,8 @@ function request(overrides: Partial<CreateInquiryRequest> = {}): CreateInquiryRe
     companyName: "Koei",
     notes: "",
     currency: "USD",
-    items: [{ productId: PRODUCT_ID, quotedPrice: 2.4 }],
+    items: [{ productId: PRODUCT_ID, quotedPrice: 2.4, notes: "" }],
+    clientSubmissionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     ...overrides,
   };
 }
@@ -64,11 +65,12 @@ describe("createInquiry", () => {
     expect(params.p_staff_name).toBeNull();
   });
 
-  it("still sends the parameter, so the existing RPC signature is unchanged", async () => {
+  it("still sends the existing parameters plus the client submission id", async () => {
     await createInquiry(request());
     const [, params] = mocks.rpc.mock.calls[0];
 
     expect(Object.keys(params).sort()).toEqual([
+      "p_client_submission_id",
       "p_company_name",
       "p_currency",
       "p_customer_name",
@@ -76,6 +78,7 @@ describe("createInquiry", () => {
       "p_notes",
       "p_staff_name",
     ]);
+    expect(params.p_client_submission_id).toBe("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
   });
 
   it("forwards the customer fields and priced items", async () => {
@@ -87,13 +90,13 @@ describe("createInquiry", () => {
     expect(params.p_notes).toBe("Ships in May");
     expect(params.p_currency).toBe("USD");
     expect(params.p_items).toEqual([
-      { productId: PRODUCT_ID, quantity: 1, quotedPrice: 2.4 },
+      { productId: PRODUCT_ID, quantity: 1, quotedPrice: 2.4, notes: "" },
     ]);
   });
 
   it("sends a quoted price of zero through unchanged", async () => {
     await createInquiry(
-      request({ items: [{ productId: PRODUCT_ID, quotedPrice: 0 }] }),
+      request({ items: [{ productId: PRODUCT_ID, quotedPrice: 0, notes: "" }] }),
     );
     const [, params] = mocks.rpc.mock.calls[0];
 

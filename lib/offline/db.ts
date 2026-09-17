@@ -5,11 +5,16 @@ import {
   CATALOGUE_DB_VERSION,
   CATALOGUE_META_KEY,
   CODE_KEY_INDEX,
+  DRAFT_STORE,
+  INQUIRY_SYNC_META_KEY,
   META_STORE,
+  OUTBOX_STORE,
   PRODUCTS_STORE,
   READINESS_META_KEY,
 } from "./constants";
 import type { CatalogueMeta } from "./authorization";
+import type { InquiryDraftRecord } from "./inquiry-records";
+import type { InquiryOutboxRecord, InquirySyncMeta } from "./inquiry-records";
 import { NO_READINESS, type OfflineReadiness } from "./readiness";
 import { normalizeLookupValue } from "./search";
 
@@ -29,18 +34,30 @@ interface CatalogueDB extends DBSchema {
   };
   [META_STORE]: {
     key: string;
-    value: CatalogueMeta | OfflineReadiness;
+    value: CatalogueMeta | OfflineReadiness | InquirySyncMeta;
+  };
+  [DRAFT_STORE]: {
+    key: string;
+    value: InquiryDraftRecord;
+  };
+  [OUTBOX_STORE]: {
+    key: string;
+    value: InquiryOutboxRecord;
   };
 }
 
 function isCatalogueMeta(value: unknown): value is CatalogueMeta {
-  return typeof value === "object" && value !== null && "lastSyncedAt" in value;
+  return typeof value === "object" && value !== null && "lastSyncedAt" in value && "count" in value;
 }
 
 function isReadiness(value: unknown): value is OfflineReadiness {
   return (
     typeof value === "object" && value !== null && "scannerAssetsReadyAt" in value
   );
+}
+
+export function isInquirySyncMeta(value: unknown): value is InquirySyncMeta {
+  return typeof value === "object" && value !== null && "lastInquirySyncedAt" in value;
 }
 
 export function toStoredProduct(product: Product): StoredProduct {
@@ -56,23 +73,34 @@ function toProduct(stored: StoredProduct): Product {
 
 let dbPromise: Promise<IDBPDatabase<CatalogueDB>> | null = null;
 
-function getDb(): Promise<IDBPDatabase<CatalogueDB>> {
+export function getDb(): Promise<IDBPDatabase<CatalogueDB>> {
   if (!dbPromise) {
     dbPromise = openDB<CatalogueDB>(CATALOGUE_DB_NAME, CATALOGUE_DB_VERSION, {
-      upgrade(database) {
-        // The catalogue is a cache: rebuilding both stores is always safe and
-        // avoids a half-migrated state where meta claims rows the products
-        // store does not hold. Sync metadata goes too, so the UI asks for a
-        // fresh sync instead of reporting a count it cannot serve.
-        if (database.objectStoreNames.contains(PRODUCTS_STORE)) {
-          database.deleteObjectStore(PRODUCTS_STORE);
+      upgrade(database, oldVersion) {
+        if (oldVersion < 2) {
+          // The catalogue is a cache: rebuilding both stores is always safe and
+          // avoids a half-migrated state where meta claims rows the products
+          // store does not hold. Sync metadata goes too, so the UI asks for a
+          // fresh sync instead of reporting a count it cannot serve.
+          if (database.objectStoreNames.contains(PRODUCTS_STORE)) {
+            database.deleteObjectStore(PRODUCTS_STORE);
+          }
+          if (database.objectStoreNames.contains(META_STORE)) {
+            database.deleteObjectStore(META_STORE);
+          }
+          const products = database.createObjectStore(PRODUCTS_STORE, { keyPath: "id" });
+          products.createIndex(CODE_KEY_INDEX, "codeKey");
+          database.createObjectStore(META_STORE);
         }
-        if (database.objectStoreNames.contains(META_STORE)) {
-          database.deleteObjectStore(META_STORE);
+
+        if (oldVersion < 3) {
+          if (!database.objectStoreNames.contains(DRAFT_STORE)) {
+            database.createObjectStore(DRAFT_STORE);
+          }
+          if (!database.objectStoreNames.contains(OUTBOX_STORE)) {
+            database.createObjectStore(OUTBOX_STORE, { keyPath: "clientSubmissionId" });
+          }
         }
-        const products = database.createObjectStore(PRODUCTS_STORE, { keyPath: "id" });
-        products.createIndex(CODE_KEY_INDEX, "codeKey");
-        database.createObjectStore(META_STORE);
       },
     });
   }
@@ -117,6 +145,17 @@ export async function writeOfflineReadiness(
 ): Promise<void> {
   const db = await getDb();
   await db.put(META_STORE, readiness, READINESS_META_KEY);
+}
+
+export async function readInquirySyncMeta(): Promise<InquirySyncMeta | null> {
+  const db = await getDb();
+  const value = await db.get(META_STORE, INQUIRY_SYNC_META_KEY);
+  return isInquirySyncMeta(value) ? value : null;
+}
+
+export async function writeInquirySyncMeta(meta: InquirySyncMeta): Promise<void> {
+  const db = await getDb();
+  await db.put(META_STORE, meta, INQUIRY_SYNC_META_KEY);
 }
 
 /**
@@ -170,18 +209,21 @@ export async function readCatalogueSnapshot(): Promise<CatalogueSnapshot> {
   };
 }
 
+function storeNames(): Array<typeof PRODUCTS_STORE | typeof META_STORE | typeof DRAFT_STORE | typeof OUTBOX_STORE> {
+  return [PRODUCTS_STORE, META_STORE, DRAFT_STORE, OUTBOX_STORE];
+}
+
 /**
- * Empties every store, including the readiness record. Unlike deleting the
- * database this cannot be blocked by another open tab, so it is what actually
- * guarantees the confidential rows are gone at logout.
+ * Empties every store, including the readiness record, the editable draft and
+ * the inquiry outbox. Unlike deleting the database this cannot be blocked by
+ * another open tab, so it is what actually guarantees the confidential rows
+ * are gone at logout.
  */
 export async function clearAllLocalData(): Promise<void> {
   const db = await getDb();
-  const tx = db.transaction([PRODUCTS_STORE, META_STORE], "readwrite");
-  await Promise.all([
-    tx.objectStore(PRODUCTS_STORE).clear(),
-    tx.objectStore(META_STORE).clear(),
-  ]);
+  const names = storeNames().filter((name) => db.objectStoreNames.contains(name));
+  const tx = db.transaction(names, "readwrite");
+  await Promise.all(names.map((name) => tx.objectStore(name).clear()));
   await tx.done;
 }
 

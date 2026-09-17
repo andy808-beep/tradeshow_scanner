@@ -227,3 +227,7 @@ export function useCatalogue(): CatalogueContextValue {
   }
   return value;
 }
+
+export function useCatalogueOptional(): CatalogueContextValue | null {
+  return useContext(CatalogueContext);
+}

@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import InquiryScreen from "@/components/inquiry-screen";
 
 export const metadata: Metadata = {
   title: "Inquiry · Koei Porcelain",
 };
 
+/** Rendered by AppScreens from the cached shell — no RSC round-trip required. */
 export default function InquiryPage() {
-  return <InquiryScreen />;
+  return null;
 }

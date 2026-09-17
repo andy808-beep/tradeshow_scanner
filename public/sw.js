@@ -47,6 +47,20 @@ function isStaticAsset(url) {
   );
 }
 
+function isAppShellPath(pathname) {
+  return (
+    pathname === "/" ||
+    pathname === "/inquiry" ||
+    pathname === "/labels" ||
+    pathname === "/login" ||
+    pathname.startsWith("/products/")
+  );
+}
+
+function isRscRequest(request, url) {
+  return request.headers.get("RSC") === "1" || url.searchParams.has("_rsc");
+}
+
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   const url = new URL(request.url);
@@ -55,9 +69,15 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   // Authenticated application data must never enter the shell cache.
+  // Inquiry API responses in particular stay out of Cache Storage.
   if (isApiRequest(url)) return;
 
   if (request.mode === "navigate") {
+    event.respondWith(networkFirstNavigation(request));
+    return;
+  }
+
+  if (isAppShellPath(url.pathname) && isRscRequest(request, url)) {
     event.respondWith(networkFirstNavigation(request));
     return;
   }
@@ -67,23 +87,34 @@ self.addEventListener("fetch", (event) => {
   }
 });
 
+async function matchByPathname(cache, pathname) {
+  const keys = await cache.keys();
+  for (const key of keys) {
+    if (new URL(key.url).pathname === pathname) {
+      const hit = await cache.match(key);
+      if (hit) return hit;
+    }
+  }
+  return undefined;
+}
+
 async function networkFirstNavigation(request) {
   const cache = await caches.open(SHELL_CACHE);
+  const url = new URL(request.url);
   try {
     const response = await fetch(request);
-    if (response.ok) {
-      const url = new URL(request.url);
-      // Only store shell HTML, never product payloads. Client product pages
-      // do not embed catalogue rows in the document.
-      if (url.pathname === "/" || url.pathname === "/login") {
-        await cache.put(request, response.clone());
-      }
+    if (response.ok && isAppShellPath(url.pathname)) {
+      // Only store shell HTML/RSC, never product or inquiry API payloads.
+      await cache.put(request, response.clone());
     }
     return response;
   } catch {
-    const cached = await cache.match(request);
-    if (cached) return cached;
+    const exact = await cache.match(request);
+    if (exact) return exact;
+    const byPath = await matchByPathname(cache, url.pathname);
+    if (byPath) return byPath;
     const home = await cache.match("/");
+    if (home && url.pathname === "/inquiry") return home;
     if (home) return home;
     return new Response("Offline", { status: 503, statusText: "Offline" });
   }

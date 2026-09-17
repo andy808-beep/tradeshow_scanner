@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import LabelsScreen from "@/components/labels-screen";
 
 export const metadata: Metadata = {
   title: "Labels · Koei Porcelain",
 };
 
+/** Rendered by AppScreens from the cached shell. */
 export default function LabelsPage() {
-  return <LabelsScreen />;
+  return null;
 }

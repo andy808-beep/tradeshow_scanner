@@ -54,7 +54,8 @@ const INQUIRY_BODY = {
   companyName: "Koei",
   notes: "",
   currency: "USD",
-  items: [{ productId: PRODUCT.id, quotedPrice: 2.4 }],
+  items: [{ productId: PRODUCT.id, quotedPrice: 2.4, notes: "" }],
+  clientSubmissionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
 };
 
 function jsonRequest(url: string, init?: RequestInit) {
@@ -195,6 +196,7 @@ describe("authenticated application APIs", () => {
       }),
     );
     expect(response.status).toBe(201);
+    expect(response.headers.get("cache-control")).toMatch(/no-store/i);
     await expect(response.json()).resolves.toEqual({ inquiryId: "inquiry-1" });
     expect(mocks.createInquiry).toHaveBeenCalled();
   });
@@ -207,7 +209,7 @@ describe("authenticated application APIs", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...INQUIRY_BODY,
-          items: [{ productId: PRODUCT.id, quantity: 99, quotedPrice: 2.4 }],
+          items: [{ productId: PRODUCT.id, quantity: 99, quotedPrice: 2.4, notes: "" }],
         }),
       }),
     );
@@ -217,7 +219,8 @@ describe("authenticated application APIs", () => {
       companyName: "Koei",
       notes: "",
       currency: "USD",
-      items: [{ productId: PRODUCT.id, quotedPrice: 2.4 }],
+      items: [{ productId: PRODUCT.id, quotedPrice: 2.4, notes: "" }],
+      clientSubmissionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     });
   });
 

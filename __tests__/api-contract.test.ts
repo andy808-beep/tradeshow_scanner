@@ -9,13 +9,14 @@ function body(overrides: Record<string, unknown> = {}) {
     companyName: "Koei",
     notes: "",
     currency: "USD",
-    items: [{ productId: PRODUCT_ID, quotedPrice: 2.4 }],
+    items: [{ productId: PRODUCT_ID, quotedPrice: 2.4, notes: "" }],
+    clientSubmissionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     ...overrides,
   };
 }
 
 function item(overrides: Record<string, unknown> = {}) {
-  return [{ productId: PRODUCT_ID, quotedPrice: 2.4, ...overrides }];
+  return [{ productId: PRODUCT_ID, quotedPrice: 2.4, notes: "", ...overrides }];
 }
 
 describe("quoted price is required", () => {
@@ -25,6 +26,7 @@ describe("quoted price is required", () => {
     if (!result.ok) return;
     expect(result.value.items[0].quotedPrice).toBe(2.4);
     expect(result.value.items[0]).not.toHaveProperty("quantity");
+    expect(result.value.clientSubmissionId).toBe("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
   });
 
   it("accepts a deliberate zero", () => {
@@ -70,7 +72,7 @@ describe("quoted price is required", () => {
     const result = validateCreateInquiry(
       body({
         items: [
-          { productId: PRODUCT_ID, quotedPrice: 2.4 },
+          { productId: PRODUCT_ID, quotedPrice: 2.4, notes: "" },
           {
             productId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
             quotedPrice: null,
@@ -101,7 +103,11 @@ describe("client-supplied quantity is ignored", () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.value.items[0]).not.toHaveProperty("quantity");
-      expect(result.value.items[0]).toEqual({ productId: PRODUCT_ID, quotedPrice: 2.4 });
+      expect(result.value.items[0]).toEqual({
+        productId: PRODUCT_ID,
+        quotedPrice: 2.4,
+        notes: "",
+      });
     }
   });
 });
@@ -151,6 +157,11 @@ describe("unchanged validation still holds", () => {
     );
   });
 
+  it("requires a client submission id", () => {
+    expect(validateCreateInquiry(body({ clientSubmissionId: "" })).ok).toBe(false);
+    expect(validateCreateInquiry(body({ clientSubmissionId: "not-a-uuid" })).ok).toBe(false);
+  });
+
   it("rejects an unsupported currency", () => {
     expect(validateCreateInquiry(body({ currency: "EUR" })).ok).toBe(false);
   });
@@ -159,8 +170,8 @@ describe("unchanged validation still holds", () => {
     const result = validateCreateInquiry(
       body({
         items: [
-          { productId: PRODUCT_ID, quotedPrice: 1 },
-          { productId: PRODUCT_ID, quotedPrice: 2 },
+          { productId: PRODUCT_ID, quotedPrice: 1, notes: "" },
+          { productId: PRODUCT_ID, quotedPrice: 2, notes: "" },
         ],
       }),
     );

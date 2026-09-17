@@ -70,11 +70,13 @@ export async function getProductByCodeRequest(code: string): Promise<Product | n
 
 export async function createInquiryRequest(
   payload: CreateInquiryRequest,
+  signal?: AbortSignal,
 ): Promise<string> {
   const response = await fetch("/api/inquiries", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+    signal,
   });
 
   if (!response.ok) throw await toApiError(response);

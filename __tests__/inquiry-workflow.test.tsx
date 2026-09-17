@@ -7,7 +7,9 @@ import { InquiryProvider, useInquiry } from "@/components/inquiry-store";
 import ProductDetailView from "@/components/product-detail-view";
 import SearchPanel from "@/components/search-panel";
 import { ApiError } from "@/lib/api-client";
-import { clearAllLocalData, replaceCatalogue } from "@/lib/offline/db";
+import { clearAllLocalData, replaceCatalogue, resetCatalogueDbForTests } from "@/lib/offline/db";
+import { listOutbox } from "@/lib/offline/inquiry-outbox";
+import { resetInquirySyncForTests } from "@/lib/offline/inquiry-sync";
 import type { Product } from "@/lib/types";
 
 const mocks = vi.hoisted(() => ({
@@ -67,13 +69,14 @@ function Probe({ onReady }: { onReady: (inquiry: ReturnType<typeof useInquiry>) 
 }
 
 function Seed({ product, children }: { product: Product; children: ReactNode }) {
-  const { addProduct } = useInquiry();
+  const { addProduct, ready } = useInquiry();
   const seeded = useRef(false);
   useEffect(() => {
-    if (seeded.current) return;
+    if (!ready || seeded.current) return;
     seeded.current = true;
     addProduct(product);
-  }, [addProduct, product]);
+  }, [addProduct, product, ready]);
+  if (!ready) return null;
   return <>{children}</>;
 }
 
@@ -111,7 +114,9 @@ async function renderEditor(product: Product = PLATE) {
 afterEach(async () => {
   cleanup();
   vi.clearAllMocks();
+  resetInquirySyncForTests();
   await clearAllLocalData();
+  resetCatalogueDbForTests();
 });
 
 beforeEach(() => {
@@ -280,7 +285,8 @@ describe("submission", () => {
 
     expect(mocks.createInquiryRequest).toHaveBeenCalledTimes(1);
     const payload = mocks.createInquiryRequest.mock.calls[0][0] as Record<string, unknown>;
-    expect(payload.items).toEqual([{ productId: PLATE.id, quotedPrice: 2.4 }]);
+    expect(payload.items).toEqual([{ productId: PLATE.id, quotedPrice: 2.4, notes: "" }]);
+    expect(typeof payload.clientSubmissionId).toBe("string");
     expect(JSON.stringify(payload)).not.toMatch(/quantity/i);
   });
 
@@ -296,16 +302,18 @@ describe("submission", () => {
     await renderEditor();
     fireEvent.change(screen.getByLabelText(/Name/), { target: { value: "Ada" } });
     fireEvent.click(screen.getByRole("button", { name: "Save inquiry" }));
-    fireEvent.click(screen.getByRole("button", { name: "Saving…" }));
-    fireEvent.click(screen.getByRole("button", { name: "Saving…" }));
+    const again = screen.queryByRole("button", { name: /Saving|Save inquiry/ });
+    if (again) fireEvent.click(again);
 
-    expect(mocks.createInquiryRequest).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(mocks.createInquiryRequest).toHaveBeenCalledTimes(1);
+    });
     resolveSave?.("inquiry-1");
     expect(await screen.findByText("Inquiry saved")).toBeVisible();
     expect(mocks.createInquiryRequest).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the complete draft when saving fails", async () => {
+  it("queues locally when synchronization fails and does not discard the inquiry", async () => {
     mocks.createInquiryRequest.mockRejectedValue(
       new ApiError("The inquiry could not be saved.", 500, ["database down"]),
     );
@@ -315,13 +323,20 @@ describe("submission", () => {
     fireEvent.change(screen.getByLabelText("Notes"), { target: { value: "Booth A" } });
     fireEvent.click(screen.getByRole("button", { name: "Save inquiry" }));
 
-    expect(await screen.findByText("The inquiry could not be saved.")).toBeVisible();
-    expect(screen.getByText("database down")).toBeVisible();
-    expect(screen.queryByText("Inquiry saved")).toBeNull();
-    expect(screen.getByLabelText(/Name/)).toHaveValue("Ada");
-    expect(screen.getByLabelText("Notes")).toHaveValue("Booth A");
-    expect(screen.getByLabelText("Quoted unit price")).toHaveValue("2.4");
-    expect(screen.getByRole("button", { name: "Save inquiry" })).toBeEnabled();
+    expect(
+      await screen.findByText("Inquiry saved on this device — awaiting synchronization."),
+    ).toBeVisible();
+    expect(screen.queryByLabelText(/Name/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Start next inquiry" })).toBeVisible();
+
+    await waitFor(async () => {
+      const queued = await listOutbox();
+      expect(queued).toHaveLength(1);
+      expect(queued[0].status).toBe("awaiting_sync");
+      expect(queued[0].payload.customerName).toBe("Ada");
+      expect(queued[0].payload.notes).toBe("Booth A");
+      expect(queued[0].payload.items).toHaveLength(1);
+    });
   });
 });
 

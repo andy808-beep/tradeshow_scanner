@@ -92,8 +92,8 @@ export default function CatalogueStatus() {
       )}
 
       <p className="mt-1 text-[10px] leading-snug text-porcelain-500">
-        Anyone with this device can read cached prices until that expiry. Log out
-        to erase the local catalogue.
+        Anyone with this unlocked authorized device can read cached prices and
+        inquiry drafts until that expiry. Log out to erase local data.
       </p>
 
       {/* Mounted only on the tap above, so the camera is never requested

@@ -3,13 +3,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
-import { ApiError, createInquiryRequest } from "@/lib/api-client";
 import { canSubmitInquiry, isLinePriced, recordedProductsLabel } from "@/lib/inquiry";
+import { useAppPathOptional } from "./app-path";
 import CustomerForm from "./customer-form";
 import InquiryLineCard from "./inquiry-line-card";
 import { useInquiry } from "./inquiry-store";
 import InquirySummary from "./inquiry-summary";
-import OnlineOnlyNotice from "./online-only-notice";
 
 type SaveState =
   | { status: "idle" }
@@ -18,13 +17,13 @@ type SaveState =
 
 export default function InquiryScreen() {
   const router = useRouter();
+  const appPath = useAppPathOptional();
   const {
     lines,
     customer,
-    currency,
     confirmation,
     clearInquiry,
-    markSubmitted,
+    saveInquiry,
   } = useInquiry();
   const [save, setSave] = useState<SaveState>({ status: "idle" });
   const inFlight = useRef(false);
@@ -49,43 +48,40 @@ export default function InquiryScreen() {
 
     inFlight.current = true;
     setSave({ status: "saving" });
-    try {
-      const inquiryId = await createInquiryRequest({
-        customerName: customer.name,
-        companyName: customer.company,
-        notes: customer.notes,
-        currency,
-        items: lines.map((line) => ({
-          productId: line.product.id,
-          quotedPrice: line.quotedUnitPrice as number,
-        })),
-      });
-      markSubmitted(inquiryId);
-      setSave({ status: "idle" });
-    } catch (error) {
+    const result = await saveInquiry();
+    if (!result.ok) {
       inFlight.current = false;
-      // The inquiry is deliberately left intact so nothing typed at the booth
-      // is lost when saving fails.
       setSave({
         status: "error",
-        message: error instanceof Error ? error.message : "The inquiry could not be saved.",
-        details: error instanceof ApiError ? error.details : [],
+        message: result.message,
+        details: result.details,
       });
+      return;
     }
+    setSave({ status: "idle" });
   }
 
   function startNextInquiry() {
     inFlight.current = false;
     clearInquiry();
     setSave({ status: "idle" });
+    if (appPath) {
+      appPath.navigate("/");
+      return;
+    }
     router.replace("/");
   }
 
   if (confirmation) {
+    const queued = confirmation.source === "queued";
     return (
       <div className="space-y-4">
         <section className="rounded-xl border border-emerald-300 bg-emerald-50 p-4">
-          <p className="text-lg font-semibold text-emerald-950">Inquiry saved</p>
+          <p className="text-lg font-semibold text-emerald-950">
+            {queued
+              ? "Inquiry saved on this device — awaiting synchronization."
+              : "Inquiry saved"}
+          </p>
           <dl className="mt-3 space-y-2 text-sm">
             <div>
               <dt className="text-xs text-emerald-800">Customer</dt>
@@ -103,12 +99,14 @@ export default function InquiryScreen() {
                 {recordedProductsLabel(confirmation.productCount)}
               </dd>
             </div>
-            <div>
-              <dt className="text-xs text-emerald-800">Inquiry ID</dt>
-              <dd className="font-mono text-sm break-all text-emerald-950">
-                {confirmation.inquiryId}
-              </dd>
-            </div>
+            {confirmation.inquiryId && (
+              <div>
+                <dt className="text-xs text-emerald-800">Inquiry ID</dt>
+                <dd className="font-mono text-sm break-all text-emerald-950">
+                  {confirmation.inquiryId}
+                </dd>
+              </div>
+            )}
           </dl>
           <button
             type="button"
@@ -129,23 +127,17 @@ export default function InquiryScreen() {
         <p className="text-sm text-porcelain-600">
           Search for a product and add it to start an inquiry.
         </p>
-        <Link
-          href="/"
-          className="inline-block rounded-xl bg-porcelain-600 px-4 py-3 text-sm font-semibold text-white"
-        >
+        <ShellHref href="/" className="inline-block rounded-xl bg-porcelain-600 px-4 py-3 text-sm font-semibold text-white">
           Scan another product
-        </Link>
+        </ShellHref>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
+      <p className="text-xs font-medium tracking-wide text-porcelain-500 uppercase">Draft</p>
       <h1 className="text-xl font-semibold text-porcelain-950">Inquiry</h1>
-      <OnlineOnlyNotice>
-        Saving an inquiry needs a network connection in this version. Queued
-        offline submission is not available yet.
-      </OnlineOnlyNotice>
 
       <ul className="space-y-3">
         {lines.map((line) => (
@@ -172,12 +164,12 @@ export default function InquiryScreen() {
         </div>
       )}
 
-      <Link
+      <ShellHref
         href="/"
         className="block w-full rounded-xl border border-porcelain-300 px-4 py-3 text-center text-sm font-semibold text-porcelain-700"
       >
         Scan another product
-      </Link>
+      </ShellHref>
 
       <button
         type="button"
@@ -204,5 +196,39 @@ export default function InquiryScreen() {
         </p>
       )}
     </div>
+  );
+}
+
+function ShellHref({
+  href,
+  className,
+  children,
+}: {
+  href: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const appPath = useAppPathOptional();
+  if (!appPath) {
+    return (
+      <Link href={href} className={className}>
+        {children}
+      </Link>
+    );
+  }
+  return (
+    <a
+      href={href}
+      className={className}
+      onClick={(event) => {
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
+          return;
+        }
+        event.preventDefault();
+        appPath.navigate(href);
+      }}
+    >
+      {children}
+    </a>
   );
 }

@@ -13,6 +13,9 @@
 # testing
 /coverage
 /test-artifacts/
+/test-results/
+/playwright-report/
+/blob-report/
 
 # next.js
 /.next/

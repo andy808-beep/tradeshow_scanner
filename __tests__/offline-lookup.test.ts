@@ -7,8 +7,9 @@ import {
 } from "@/lib/offline/search";
 import {
   getProductLocalFirst,
+  lookupLocalSearch,
+  refreshSearchFromApi,
   scanProductsLocalFirst,
-  searchProductsLocalFirst,
 } from "@/lib/offline/lookup";
 import { LOOKUP_MESSAGES } from "@/lib/offline/constants";
 import type { CatalogueAccess } from "@/lib/offline/authorization";
@@ -60,57 +61,46 @@ describe("barcode normalization and local lookup", () => {
 });
 
 describe("offline search", () => {
-  it("queries the local catalogue first", async () => {
-    const result = await searchProductsLocalFirst(
-      [K10188],
-      READY,
-      "Abbesses",
-      new AbortController().signal,
-      false,
-    );
+  it("queries the local catalogue synchronously, with no network involved", () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const result = lookupLocalSearch([K10188], READY, "Abbesses");
     expect(result).toEqual({
       status: "ready",
       products: [K10188],
       source: "local",
     });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 
-  it("does not treat a missing catalogue as a product miss", async () => {
-    const result = await searchProductsLocalFirst(
-      [],
-      { kind: "missing" },
-      "K10188-13",
-      new AbortController().signal,
-      false,
-    );
-    expect(result).toEqual({
+  it("does not treat a missing catalogue as a product miss", () => {
+    expect(lookupLocalSearch([], { kind: "missing" }, "K10188-13")).toEqual({
       status: "error",
       reason: "unsynced",
       message: LOOKUP_MESSAGES.unsynced,
     });
   });
 
-  it("keeps local results when the network refresh fails", async () => {
+  it("reports a failed network refresh as no refresh, leaving local results", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => {
         throw new TypeError("Failed to fetch");
       }),
     );
-    const result = await searchProductsLocalFirst(
-      [K10188],
-      READY,
-      "K10188-13",
-      new AbortController().signal,
-      true,
-    );
-    expect(result).toEqual({
-      status: "ready",
-      products: [K10188],
-      source: "local",
-    });
+    await expect(refreshSearchFromApi("K10188-13")).resolves.toBeNull();
     vi.unstubAllGlobals();
   });
+
+  it("abandons a refresh that never settles instead of waiting on it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise<Response>(() => {})),
+    );
+    await expect(refreshSearchFromApi("K10188-13", undefined)).resolves.toBeNull();
+    vi.unstubAllGlobals();
+  }, 10_000);
 });
 
 describe("offline product-code lookup and details", () => {
@@ -192,13 +182,11 @@ describe("offline barcode scan lookup", () => {
 });
 
 describe("empty catalogue state", () => {
-  it("searches an authorized empty catalogue as no local matches", async () => {
-    const result = await searchProductsLocalFirst(
+  it("searches an authorized empty catalogue as no local matches", () => {
+    const result = lookupLocalSearch(
       [],
       { kind: "ready", meta: { lastSyncedAt: 1, count: 0 }, expiresAt: 99 },
       "K10188-13",
-      new AbortController().signal,
-      false,
     );
     expect(result).toEqual({ status: "ready", products: [], source: "local" });
   });

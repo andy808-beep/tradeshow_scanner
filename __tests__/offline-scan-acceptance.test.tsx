@@ -43,10 +43,7 @@ const { InquiryProvider } = await import("@/components/inquiry-store");
 const { default: CatalogueStatus } = await import("@/components/catalogue-status");
 const { default: SearchPanel } = await import("@/components/search-panel");
 const { READINESS_MESSAGES } = await import("@/lib/offline/constants");
-const { readOfflineReadiness, resetCatalogueDbForTests } = await import(
-  "@/lib/offline/db"
-);
-const { clearConfidentialLocalData } = await import("@/lib/offline/clear");
+const { clearAllLocalData, readOfflineReadiness } = await import("@/lib/offline/db");
 const { resetScannerPreloadForTests } = await import("@/lib/offline/scanner-assets");
 
 const PRODUCT: Product = {
@@ -126,8 +123,9 @@ beforeEach(() => {
 
 afterEach(async () => {
   cleanup();
-  await clearConfidentialLocalData();
-  resetCatalogueDbForTests();
+  // Emptying the stores keeps this file's single IndexedDB connection alive;
+  // deleting the database would block on it and stall the next test.
+  await clearAllLocalData();
   resetScannerPreloadForTests();
   vi.unstubAllGlobals();
 });
@@ -217,8 +215,9 @@ describe("offline scan acceptance", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Sync products" }));
     expect(await screen.findByText(/2 products/)).toBeVisible();
+    // The camera test is only offered once the scanner chunks are cached.
+    expect(await screen.findByRole("button", { name: "Test camera" })).toBeVisible();
     expect(screen.queryByText(READINESS_MESSAGES.ready)).toBeNull();
-    expect(screen.getByRole("button", { name: "Test camera" })).toBeVisible();
   });
 
   it("fails immediately offline for a code that is not in the catalogue", async () => {

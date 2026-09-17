@@ -59,7 +59,7 @@ export default function CatalogueStatus() {
         </p>
       ) : (
         <p className="mt-1 text-[11px] leading-snug text-amber-900">
-          {LOOKUP_MESSAGES.unsynced} Tap Sync products while online.
+          No offline catalogue on this device. {LOOKUP_MESSAGES.unsynced}
         </p>
       )}
 

@@ -4,17 +4,28 @@ import {
   CATALOGUE_DB_NAME,
   CATALOGUE_DB_VERSION,
   CATALOGUE_META_KEY,
+  CODE_KEY_INDEX,
   META_STORE,
   PRODUCTS_STORE,
   READINESS_META_KEY,
 } from "./constants";
 import type { CatalogueMeta } from "./authorization";
 import { NO_READINESS, type OfflineReadiness } from "./readiness";
+import { normalizeLookupValue } from "./search";
+
+/**
+ * Products are keyed by `id` (the catalogue UUID) and carry a derived
+ * `codeKey`: the product code with separators and case removed. The same
+ * normalization runs on every query, so a stored record is always reachable
+ * by the code an employee types or scans.
+ */
+export type StoredProduct = Product & { codeKey: string };
 
 interface CatalogueDB extends DBSchema {
   [PRODUCTS_STORE]: {
     key: string;
-    value: Product;
+    value: StoredProduct;
+    indexes: { [CODE_KEY_INDEX]: string };
   };
   [META_STORE]: {
     key: string;
@@ -32,18 +43,36 @@ function isReadiness(value: unknown): value is OfflineReadiness {
   );
 }
 
+export function toStoredProduct(product: Product): StoredProduct {
+  return { ...product, codeKey: normalizeLookupValue(product.code) };
+}
+
+/** Strips the derived key so callers only ever see an exact `Product`. */
+function toProduct(stored: StoredProduct): Product {
+  const { codeKey, ...product } = stored;
+  void codeKey;
+  return product;
+}
+
 let dbPromise: Promise<IDBPDatabase<CatalogueDB>> | null = null;
 
 function getDb(): Promise<IDBPDatabase<CatalogueDB>> {
   if (!dbPromise) {
     dbPromise = openDB<CatalogueDB>(CATALOGUE_DB_NAME, CATALOGUE_DB_VERSION, {
       upgrade(database) {
-        if (!database.objectStoreNames.contains(PRODUCTS_STORE)) {
-          database.createObjectStore(PRODUCTS_STORE, { keyPath: "id" });
+        // The catalogue is a cache: rebuilding both stores is always safe and
+        // avoids a half-migrated state where meta claims rows the products
+        // store does not hold. Sync metadata goes too, so the UI asks for a
+        // fresh sync instead of reporting a count it cannot serve.
+        if (database.objectStoreNames.contains(PRODUCTS_STORE)) {
+          database.deleteObjectStore(PRODUCTS_STORE);
         }
-        if (!database.objectStoreNames.contains(META_STORE)) {
-          database.createObjectStore(META_STORE);
+        if (database.objectStoreNames.contains(META_STORE)) {
+          database.deleteObjectStore(META_STORE);
         }
+        const products = database.createObjectStore(PRODUCTS_STORE, { keyPath: "id" });
+        products.createIndex(CODE_KEY_INDEX, "codeKey");
+        database.createObjectStore(META_STORE);
       },
     });
   }
@@ -54,6 +83,27 @@ export async function readCatalogueMeta(): Promise<CatalogueMeta | null> {
   const db = await getDb();
   const value = await db.get(META_STORE, CATALOGUE_META_KEY);
   return isCatalogueMeta(value) ? value : null;
+}
+
+export async function readCatalogueProducts(): Promise<Product[]> {
+  const db = await getDb();
+  return (await db.getAll(PRODUCTS_STORE)).map(toProduct);
+}
+
+export async function countCatalogueProducts(): Promise<number> {
+  const db = await getDb();
+  return db.count(PRODUCTS_STORE);
+}
+
+/** Exact lookup through the normalized-code index, for verification. */
+export async function findStoredProductByCode(code: string): Promise<Product | null> {
+  const db = await getDb();
+  const stored = await db.getFromIndex(
+    PRODUCTS_STORE,
+    CODE_KEY_INDEX,
+    normalizeLookupValue(code),
+  );
+  return stored ? toProduct(stored) : null;
 }
 
 export async function readOfflineReadiness(): Promise<OfflineReadiness> {
@@ -69,14 +119,10 @@ export async function writeOfflineReadiness(
   await db.put(META_STORE, readiness, READINESS_META_KEY);
 }
 
-export async function readCatalogueProducts(): Promise<Product[]> {
-  const db = await getDb();
-  return db.getAll(PRODUCTS_STORE);
-}
-
 /**
- * Replaces the local catalogue in one IndexedDB transaction. If the write
- * fails, IndexedDB aborts and the previous complete catalogue remains.
+ * Replaces the local catalogue in one IndexedDB transaction and resolves only
+ * after it commits. If any write fails, IndexedDB aborts the whole
+ * transaction and the previous complete catalogue remains.
  */
 export async function replaceCatalogue(
   products: Product[],
@@ -84,30 +130,88 @@ export async function replaceCatalogue(
 ): Promise<void> {
   const db = await getDb();
   const tx = db.transaction([PRODUCTS_STORE, META_STORE], "readwrite");
-  await tx.objectStore(PRODUCTS_STORE).clear();
+  const store = tx.objectStore(PRODUCTS_STORE);
+
+  // Requests are queued without awaiting each one: an interleaved non-IndexedDB
+  // await would let the transaction auto-commit early.
+  const writes: Promise<unknown>[] = [store.clear()];
   for (const product of products) {
-    await tx.objectStore(PRODUCTS_STORE).put(product);
+    writes.push(store.put(toStoredProduct(product)));
   }
-  await tx.objectStore(META_STORE).put(meta, CATALOGUE_META_KEY);
+  writes.push(tx.objectStore(META_STORE).put(meta, CATALOGUE_META_KEY));
+
+  await Promise.all(writes);
   await tx.done;
 }
 
-export async function clearCatalogue(): Promise<void> {
+export interface CatalogueSnapshot {
+  meta: CatalogueMeta | null;
+  products: Product[];
+  count: number;
+  /** False when any stored record lacks a usable normalized code. */
+  allCodesSearchable: boolean;
+}
+
+/** Reads the committed catalogue back in a fresh transaction. */
+export async function readCatalogueSnapshot(): Promise<CatalogueSnapshot> {
+  const db = await getDb();
+  const tx = db.transaction([PRODUCTS_STORE, META_STORE], "readonly");
+  const [stored, rawMeta] = await Promise.all([
+    tx.objectStore(PRODUCTS_STORE).getAll(),
+    tx.objectStore(META_STORE).get(CATALOGUE_META_KEY),
+  ]);
+  await tx.done;
+
+  return {
+    meta: isCatalogueMeta(rawMeta) ? rawMeta : null,
+    products: stored.map(toProduct),
+    count: stored.length,
+    allCodesSearchable: stored.every((record) => record.codeKey.length > 0),
+  };
+}
+
+/**
+ * Empties every store, including the readiness record. Unlike deleting the
+ * database this cannot be blocked by another open tab, so it is what actually
+ * guarantees the confidential rows are gone at logout.
+ */
+export async function clearAllLocalData(): Promise<void> {
   const db = await getDb();
   const tx = db.transaction([PRODUCTS_STORE, META_STORE], "readwrite");
-  await tx.objectStore(PRODUCTS_STORE).clear();
-  await tx.objectStore(META_STORE).clear();
+  await Promise.all([
+    tx.objectStore(PRODUCTS_STORE).clear(),
+    tx.objectStore(META_STORE).clear(),
+  ]);
   await tx.done;
 }
 
-/** Deletes the whole confidential database. Used on logout. */
-export async function deleteCatalogueDatabase(): Promise<void> {
+/**
+ * Deletes the whole database. Another tab holding a connection blocks this
+ * indefinitely, so the wait is bounded and the result reported; the stores
+ * have already been emptied by then.
+ */
+export async function deleteCatalogueDatabase(timeoutMs = 2_000): Promise<boolean> {
   if (dbPromise) {
     const db = await dbPromise.catch(() => null);
     db?.close();
     dbPromise = null;
   }
-  await deleteDB(CATALOGUE_DB_NAME);
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expiry = new Promise<boolean>((resolve) => {
+    timer = setTimeout(() => resolve(false), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([
+      deleteDB(CATALOGUE_DB_NAME)
+        .then(() => true)
+        .catch(() => false),
+      expiry,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function resetCatalogueDbForTests(): void {

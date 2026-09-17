@@ -130,6 +130,7 @@ export default function BarcodeScanner({
 
         setStatus({ kind: "notFound", raw: rawValue });
       } catch (error) {
+        if (controller.signal.aborted) return;
         setStatus({
           kind: "lookupFailed",
           raw: rawValue,

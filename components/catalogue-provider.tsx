@@ -18,11 +18,11 @@ import {
 } from "@/lib/offline/authorization";
 import { LOOKUP_MESSAGES } from "@/lib/offline/constants";
 import {
-  readCatalogueMeta,
-  readCatalogueProducts,
+  readCatalogueSnapshot,
   readOfflineReadiness,
   writeOfflineReadiness,
 } from "@/lib/offline/db";
+import { offlineDebug } from "@/lib/offline/diagnostics";
 import { isOnline } from "@/lib/offline/lookup";
 import {
   NO_READINESS,
@@ -31,7 +31,7 @@ import {
   type OfflineStage,
 } from "@/lib/offline/readiness";
 import { preloadScannerAssets } from "@/lib/offline/scanner-assets";
-import { syncProductCatalogue } from "@/lib/offline/sync";
+import { CatalogueVerificationError, syncProductCatalogue } from "@/lib/offline/sync";
 
 interface CatalogueContextValue {
   products: Product[];
@@ -43,6 +43,8 @@ interface CatalogueContextValue {
   online: boolean;
   syncing: boolean;
   syncError: string | null;
+  /** Set when the local catalogue itself could not be read. */
+  localError: string | null;
   sync: () => Promise<void>;
   /** Records that the real camera opened here, completing offline setup. */
   confirmCameraReady: () => void;
@@ -58,6 +60,7 @@ export function CatalogueProvider({ children }: { children: ReactNode }) {
   const [online, setOnline] = useState(isOnline);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
   /** Read-modify-write against IndexedDB so concurrent updates cannot clash. */
@@ -82,19 +85,42 @@ export function CatalogueProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const [nextMeta, nextReadiness] = await Promise.all([
-        readCatalogueMeta(),
-        readOfflineReadiness(),
-      ]);
-      const nextProducts = nextMeta ? await readCatalogueProducts() : [];
-      if (cancelled) return;
-      setMeta(nextMeta);
-      setReadiness(nextReadiness);
-      setProducts(nextProducts);
+      try {
+        const [snapshot, nextReadiness] = await Promise.all([
+          readCatalogueSnapshot(),
+          readOfflineReadiness(),
+        ]);
+        if (cancelled) return;
 
-      // Catch up devices that synced before the scanner was preloadable.
-      if (nextMeta && nextReadiness.scannerAssetsReadyAt === null && isOnline()) {
-        void preloadScanner();
+        offlineDebug("load.snapshot", {
+          storedProducts: snapshot.count,
+          metaCount: snapshot.meta?.count ?? -1,
+          allCodesSearchable: snapshot.allCodesSearchable,
+        });
+
+        // A meta record that claims rows the products store does not hold is
+        // treated as no catalogue, so the UI asks for a sync instead of
+        // searching an empty store.
+        const usable =
+          snapshot.meta !== null && snapshot.count === snapshot.meta.count
+            ? snapshot.meta
+            : null;
+
+        setMeta(usable);
+        setProducts(usable ? snapshot.products : []);
+        setReadiness(nextReadiness);
+        setLocalError(null);
+
+        // Catch up devices that synced before the scanner was preloadable.
+        if (usable && nextReadiness.scannerAssetsReadyAt === null && isOnline()) {
+          void preloadScanner();
+        }
+      } catch (error) {
+        // A rejected IndexedDB read is surfaced, never swallowed.
+        offlineDebug("load.failed", {
+          error: error instanceof Error ? error.name : "unknown",
+        });
+        if (!cancelled) setLocalError(LOOKUP_MESSAGES.localUnavailable);
       }
     })();
     return () => {
@@ -120,23 +146,29 @@ export function CatalogueProvider({ children }: { children: ReactNode }) {
     setSyncing(true);
     setSyncError(null);
     try {
+      // Resolves only after the catalogue is committed to IndexedDB and read
+      // back, so the reported count is the count this device can serve.
       const result = await syncProductCatalogue();
       setProducts(result.products);
       setMeta(result.meta);
+      setLocalError(null);
       setNow(Date.now());
       // Scanner and decoder chunks are code-split, so they must be fetched
       // while the connection is still up or the camera cannot start offline.
       await preloadScanner();
     } catch (error) {
-      const previous = await readCatalogueMeta();
       setSyncError(
         error instanceof ApiError && error.status === 401
           ? "Sign-in expired. Sign in again, then sync."
-          : LOOKUP_MESSAGES.syncFailed,
+          : error instanceof CatalogueVerificationError
+            ? `${error.message} ${LOOKUP_MESSAGES.syncFailed}`
+            : LOOKUP_MESSAGES.syncFailed,
       );
-      if (previous) {
-        setMeta(previous);
-        setProducts(await readCatalogueProducts());
+
+      const kept = await readCatalogueSnapshot().catch(() => null);
+      if (kept?.meta) {
+        setMeta(kept.meta);
+        setProducts(kept.products);
       }
     } finally {
       setSyncing(false);
@@ -148,6 +180,7 @@ export function CatalogueProvider({ children }: { children: ReactNode }) {
     setMeta(null);
     setReadiness(NO_READINESS);
     setSyncError(null);
+    setLocalError(null);
   }, []);
 
   const access = useMemo(() => inspectCatalogueAccess(meta, now), [meta, now]);
@@ -163,6 +196,7 @@ export function CatalogueProvider({ children }: { children: ReactNode }) {
       online,
       syncing,
       syncError,
+      localError,
       sync,
       confirmCameraReady,
       resetLocal,
@@ -176,6 +210,7 @@ export function CatalogueProvider({ children }: { children: ReactNode }) {
       online,
       syncing,
       syncError,
+      localError,
       sync,
       confirmCameraReady,
       resetLocal,

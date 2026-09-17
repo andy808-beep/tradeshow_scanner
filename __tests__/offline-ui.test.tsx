@@ -8,12 +8,11 @@ import LogoutButton from "@/components/logout-button";
 import ProductDetailScreen from "@/components/product-detail-screen";
 import SearchPanel from "@/components/search-panel";
 import { LOOKUP_MESSAGES } from "@/lib/offline/constants";
-import { clearConfidentialLocalData } from "@/lib/offline/clear";
 import {
+  clearAllLocalData,
   readCatalogueMeta,
   readCatalogueProducts,
   replaceCatalogue,
-  resetCatalogueDbForTests,
 } from "@/lib/offline/db";
 import type { Product } from "@/lib/types";
 
@@ -52,8 +51,9 @@ function renderCatalogue(ui: ReactNode) {
 
 afterEach(async () => {
   cleanup();
-  await clearConfidentialLocalData();
-  resetCatalogueDbForTests();
+  // Emptying the stores, rather than deleting the database, keeps the single
+  // connection this file opens alive so the next test cannot block on it.
+  await clearAllLocalData();
   vi.unstubAllGlobals();
   goOnline();
 });

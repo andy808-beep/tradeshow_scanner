@@ -106,6 +106,7 @@ export type CameraErrorReason =
   | "inUse"
   | "insecure"
   | "unsupported"
+  | "assetsMissing"
   | "unknown";
 
 export interface CameraErrorInfo {
@@ -116,6 +117,13 @@ export interface CameraErrorInfo {
 export const CAMERA_UNSUPPORTED: CameraErrorInfo = {
   reason: "unsupported",
   message: "This browser does not provide camera access.",
+};
+
+/** The decoder chunks were never cached, so scanning cannot start offline. */
+export const SCANNER_ASSETS_MISSING: CameraErrorInfo = {
+  reason: "assetsMissing",
+  message:
+    "Scanner files are not on this device yet. Reconnect, tap Sync products, then run Test camera.",
 };
 
 export function describeCameraError(error: unknown): CameraErrorInfo {

@@ -2,7 +2,6 @@
 
 import type { IScannerControls } from "@zxing/browser";
 import type { DecodeHintType } from "@zxing/library";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useCatalogue } from "@/components/catalogue-provider";
 import {
@@ -11,6 +10,7 @@ import {
   describeCameraError,
   hasCameraSupport,
   REAR_CAMERA_CONSTRAINTS,
+  SCANNER_ASSETS_MISSING,
   stopMediaStream,
   type CameraErrorInfo,
 } from "@/lib/barcode";
@@ -35,8 +35,18 @@ type Status =
 
 interface BarcodeScannerProps {
   onClose: () => void;
+  /**
+   * A single match, already resolved from the local catalogue. The caller
+   * renders it in place: a route change would need a server response that an
+   * offline device cannot get.
+   */
+  onProduct?: (product: Product) => void;
   /** Called when a scan matches several products, so the page can show them. */
-  onMultipleResults: (rawValue: string, products: Product[]) => void;
+  onMultipleResults?: (rawValue: string, products: Product[]) => void;
+  /** Fires once the real camera is streaming, which completes offline setup. */
+  onCameraReady?: () => void;
+  /** "test" only proves the camera works; decoded values are ignored. */
+  purpose?: "scan" | "test";
 }
 
 const STATUS_LABELS: Record<Status["kind"], string> = {
@@ -50,9 +60,11 @@ const STATUS_LABELS: Record<Status["kind"], string> = {
 
 export default function BarcodeScanner({
   onClose,
+  onProduct,
   onMultipleResults,
+  onCameraReady,
+  purpose = "scan",
 }: BarcodeScannerProps) {
-  const router = useRouter();
   const { products: catalogue, access, online } = useCatalogue();
   const videoRef = useRef<HTMLVideoElement>(null);
   const controlsRef = useRef<IScannerControls | null>(null);
@@ -107,14 +119,12 @@ export default function BarcodeScanner({
         const { match } = result;
 
         if (match.kind === "single") {
-          stopCamera();
-          router.push(`/products/${encodeURIComponent(match.product.code)}`);
+          onProduct?.(match.product);
           return;
         }
 
         if (match.kind === "multiple") {
-          stopCamera();
-          onMultipleResults(rawValue, match.products);
+          onMultipleResults?.(rawValue, match.products);
           return;
         }
 
@@ -130,14 +140,24 @@ export default function BarcodeScanner({
         });
       }
     },
-    [access, catalogue, onMultipleResults, online, router, stopCamera],
+    [access, catalogue, onMultipleResults, onProduct, online, stopCamera],
   );
 
-  // Held in a ref so the camera effect never restarts when this changes.
+  // Held in refs so the camera effect never restarts when these change.
   const lookUpRef = useRef(lookUp);
   useEffect(() => {
     lookUpRef.current = lookUp;
   }, [lookUp]);
+
+  const cameraReadyRef = useRef(onCameraReady);
+  useEffect(() => {
+    cameraReadyRef.current = onCameraReady;
+  }, [onCameraReady]);
+
+  const purposeRef = useRef(purpose);
+  useEffect(() => {
+    purposeRef.current = purpose;
+  }, [purpose]);
 
   useEffect(() => {
     let cancelled = false;
@@ -147,10 +167,25 @@ export default function BarcodeScanner({
     const videoElement = videoRef.current;
 
     async function start() {
+      // Loaded here so the library stays out of the search page bundle. The
+      // chunks are preloaded during product sync, because offline they can no
+      // longer be fetched.
+      let modules;
       try {
-        // Loaded here so the library stays out of the search page bundle.
+        modules = await Promise.all([
+          import("@zxing/browser"),
+          import("@zxing/library"),
+        ]);
+      } catch {
+        if (!cancelled) {
+          setStatus({ kind: "cameraError", info: SCANNER_ASSETS_MISSING });
+        }
+        return;
+      }
+
+      try {
         const [{ BrowserMultiFormatReader }, { BarcodeFormat, DecodeHintType: Hints }] =
-          await Promise.all([import("@zxing/browser"), import("@zxing/library")]);
+          modules;
 
         if (cancelled) return;
 
@@ -170,12 +205,14 @@ export default function BarcodeScanner({
         const reader = new BrowserMultiFormatReader(hints);
 
         // Requests camera permission — only ever reached after the user
-        // pressed Scan, because this component mounts on that press.
+        // pressed Scan or Test camera, because this component mounts on that
+        // press.
         controls = await reader.decodeFromConstraints(
           REAR_CAMERA_CONSTRAINTS,
           video,
           (result) => {
             if (!result || handledRef.current) return;
+            if (purposeRef.current === "test") return;
             void lookUpRef.current(result.getText());
           },
         );
@@ -190,6 +227,9 @@ export default function BarcodeScanner({
         }
 
         setStatus({ kind: "scanning" });
+        // The camera really opened in this installed context, which is the
+        // only proof that offline scanning will work later.
+        cameraReadyRef.current?.();
       } catch (error) {
         if (cancelled) return;
         setStatus({ kind: "cameraError", info: describeCameraError(error) });
@@ -242,6 +282,7 @@ export default function BarcodeScanner({
     }
   }
 
+  const testing = purpose === "test";
   const showViewfinder = status.kind === "starting" || status.kind === "scanning";
   const rawValue =
     status.kind === "notFound" ||
@@ -254,7 +295,7 @@ export default function BarcodeScanner({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Barcode scanner"
+      aria-label={testing ? "Camera test" : "Barcode scanner"}
       className="fixed inset-0 z-50 flex flex-col bg-porcelain-950 text-white"
     >
       <div className="flex items-start justify-between gap-3 p-3">
@@ -262,12 +303,14 @@ export default function BarcodeScanner({
           aria-live="polite"
           className="rounded-full bg-black/40 px-3 py-1.5 text-sm font-medium"
         >
-          {STATUS_LABELS[status.kind]}
+          {testing && status.kind === "scanning"
+            ? "Camera works — offline scanning is ready"
+            : STATUS_LABELS[status.kind]}
         </p>
         <button
           type="button"
           onClick={handleClose}
-          aria-label="Close scanner"
+          aria-label={testing ? "Close camera test" : "Close scanner"}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-black/40 text-2xl leading-none"
         >
           ×
@@ -287,7 +330,9 @@ export default function BarcodeScanner({
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-4">
             <div className="h-44 w-[78%] rounded-2xl border-4 border-white/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]" />
             <p className="px-6 text-center text-sm text-white/90">
-              Hold the barcode inside the frame.
+              {testing
+                ? "Close this when you can see the camera picture."
+                : "Hold the barcode inside the frame."}
             </p>
           </div>
         )}
@@ -296,11 +341,14 @@ export default function BarcodeScanner({
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
             <p className="text-base font-semibold">Camera unavailable</p>
             <p className="text-sm text-white/80">{status.info.message}</p>
-            <p className="text-sm text-white/70">
-              You can still type a code below, or close the scanner and use search.
-            </p>
+            {!testing && (
+              <p className="text-sm text-white/70">
+                You can still type a code below, or close the scanner and use search.
+              </p>
+            )}
             {status.info.reason !== "unsupported" &&
-              status.info.reason !== "noCamera" && (
+              status.info.reason !== "noCamera" &&
+              status.info.reason !== "assetsMissing" && (
                 <button
                   type="button"
                   onClick={handleRetry}
@@ -350,40 +398,42 @@ export default function BarcodeScanner({
       </div>
 
       {/* Anchored to the bottom so it stays within thumb reach on a phone. */}
-      <form
-        onSubmit={handleManualSubmit}
-        className="space-y-2 border-t border-white/15 bg-porcelain-950/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
-      >
-        <label htmlFor="manual-code" className="block text-xs text-white/70">
-          Can’t scan? Enter the code or barcode
-        </label>
-        <div className="flex gap-2">
-          <input
-            id="manual-code"
-            type="text"
-            value={manualValue}
-            onChange={(event) => setManualValue(event.target.value)}
-            placeholder="e.g. K10188-13"
-            autoComplete="off"
-            autoCapitalize="off"
-            autoCorrect="off"
-            spellCheck={false}
-            className="h-12 flex-1 rounded-xl border border-white/25 bg-white/10 px-3 text-base text-white placeholder:text-white/40 focus:border-white/60 focus:outline-none"
-          />
-          <button
-            type="submit"
-            disabled={manualValue.trim() === ""}
-            className="h-12 shrink-0 rounded-xl bg-white px-5 text-base font-semibold text-porcelain-900 disabled:bg-white/30 disabled:text-white/60"
-          >
-            Find
-          </button>
-        </div>
-        {rawValue !== null && status.kind !== "lookingUp" && (
-          <p className="text-xs text-white/60">
-            Scanned value kept exactly as decoded.
-          </p>
-        )}
-      </form>
+      {!testing && (
+        <form
+          onSubmit={handleManualSubmit}
+          className="space-y-2 border-t border-white/15 bg-porcelain-950/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+        >
+          <label htmlFor="manual-code" className="block text-xs text-white/70">
+            Can’t scan? Enter the code or barcode
+          </label>
+          <div className="flex gap-2">
+            <input
+              id="manual-code"
+              type="text"
+              value={manualValue}
+              onChange={(event) => setManualValue(event.target.value)}
+              placeholder="e.g. K10188-13"
+              autoComplete="off"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              className="h-12 flex-1 rounded-xl border border-white/25 bg-white/10 px-3 text-base text-white placeholder:text-white/40 focus:border-white/60 focus:outline-none"
+            />
+            <button
+              type="submit"
+              disabled={manualValue.trim() === ""}
+              className="h-12 shrink-0 rounded-xl bg-white px-5 text-base font-semibold text-porcelain-900 disabled:bg-white/30 disabled:text-white/60"
+            >
+              Find
+            </button>
+          </div>
+          {rawValue !== null && status.kind !== "lookingUp" && (
+            <p className="text-xs text-white/60">
+              Scanned value kept exactly as decoded.
+            </p>
+          )}
+        </form>
+      )}
     </div>
   );
 }

@@ -6,8 +6,10 @@ import {
   CATALOGUE_META_KEY,
   META_STORE,
   PRODUCTS_STORE,
+  READINESS_META_KEY,
 } from "./constants";
 import type { CatalogueMeta } from "./authorization";
+import { NO_READINESS, type OfflineReadiness } from "./readiness";
 
 interface CatalogueDB extends DBSchema {
   [PRODUCTS_STORE]: {
@@ -16,8 +18,18 @@ interface CatalogueDB extends DBSchema {
   };
   [META_STORE]: {
     key: string;
-    value: CatalogueMeta;
+    value: CatalogueMeta | OfflineReadiness;
   };
+}
+
+function isCatalogueMeta(value: unknown): value is CatalogueMeta {
+  return typeof value === "object" && value !== null && "lastSyncedAt" in value;
+}
+
+function isReadiness(value: unknown): value is OfflineReadiness {
+  return (
+    typeof value === "object" && value !== null && "scannerAssetsReadyAt" in value
+  );
 }
 
 let dbPromise: Promise<IDBPDatabase<CatalogueDB>> | null = null;
@@ -40,7 +52,21 @@ function getDb(): Promise<IDBPDatabase<CatalogueDB>> {
 
 export async function readCatalogueMeta(): Promise<CatalogueMeta | null> {
   const db = await getDb();
-  return (await db.get(META_STORE, CATALOGUE_META_KEY)) ?? null;
+  const value = await db.get(META_STORE, CATALOGUE_META_KEY);
+  return isCatalogueMeta(value) ? value : null;
+}
+
+export async function readOfflineReadiness(): Promise<OfflineReadiness> {
+  const db = await getDb();
+  const value = await db.get(META_STORE, READINESS_META_KEY);
+  return isReadiness(value) ? value : NO_READINESS;
+}
+
+export async function writeOfflineReadiness(
+  readiness: OfflineReadiness,
+): Promise<void> {
+  const db = await getDb();
+  await db.put(META_STORE, readiness, READINESS_META_KEY);
 }
 
 export async function readCatalogueProducts(): Promise<Product[]> {

@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { useCatalogue } from "@/components/catalogue-provider";
+import ProductDetailView from "@/components/product-detail-view";
 import { searchProductsLocalFirst } from "@/lib/offline/lookup";
 import type { Product } from "@/lib/types";
 import ProductCard from "./product-card";
@@ -28,13 +29,14 @@ const ERROR_TITLES: Record<string, string> = {
 };
 
 export default function SearchPanel() {
-  const { products: catalogue, access, online } = useCatalogue();
+  const { products: catalogue, access, online, confirmCameraReady } = useCatalogue();
   const [query, setQuery] = useState("");
   const [outcome, setOutcome] = useState<{
     query: string;
     result: SearchOutcome;
   } | null>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [selected, setSelected] = useState<Product | null>(null);
 
   const trimmed = query.trim();
 
@@ -42,6 +44,12 @@ export default function SearchPanel() {
     setScannerOpen(false);
     setQuery(rawValue);
     setOutcome({ query: rawValue.trim(), result: { status: "ready", products } });
+  }
+
+  /** Renders the cached product here: no navigation, no product request. */
+  function showProduct(product: Product) {
+    setScannerOpen(false);
+    setSelected(product);
   }
 
   useEffect(() => {
@@ -101,6 +109,10 @@ export default function SearchPanel() {
         ? outcome.result
         : { status: "loading" };
 
+  if (selected) {
+    return <ProductDetailView product={selected} onBack={() => setSelected(null)} />;
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-stretch gap-2">
@@ -125,7 +137,9 @@ export default function SearchPanel() {
       {scannerOpen && (
         <BarcodeScanner
           onClose={() => setScannerOpen(false)}
+          onProduct={showProduct}
           onMultipleResults={showScanResults}
+          onCameraReady={confirmCameraReady}
         />
       )}
 
@@ -162,7 +176,7 @@ export default function SearchPanel() {
             <ul className="space-y-2">
               {view.products.map((product) => (
                 <li key={product.id}>
-                  <ProductCard product={product} />
+                  <ProductCard product={product} onSelect={showProduct} />
                 </li>
               ))}
             </ul>

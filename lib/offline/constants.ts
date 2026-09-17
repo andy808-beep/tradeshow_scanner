@@ -3,6 +3,7 @@ export const CATALOGUE_DB_VERSION = 1;
 export const PRODUCTS_STORE = "products";
 export const META_STORE = "meta";
 export const CATALOGUE_META_KEY = "catalogue";
+export const READINESS_META_KEY = "readiness";
 
 /** Service-worker cache for the app shell only — never API responses. */
 export const SHELL_CACHE_NAME = "koei-shell-v1";
@@ -19,4 +20,16 @@ export const LOOKUP_MESSAGES = {
   syncFailed: "Synchronization failed. The previous catalogue on this device was kept.",
   notFoundLocal: "No matching product in the offline catalogue.",
   empty: "The synchronized catalogue is empty.",
+} as const;
+
+/**
+ * Offline setup is only complete once the catalogue, the scanner and decoder
+ * chunks and the camera itself have all been proven in this installed context.
+ * A synced catalogue alone is never announced as offline ready.
+ */
+export const READINESS_MESSAGES = {
+  scannerAssets:
+    "Scanner files are still downloading. Stay online and tap Sync products again if this does not clear.",
+  cameraTest: "Products synced — test camera to finish offline setup",
+  ready: "Offline ready",
 } as const;

@@ -5,6 +5,7 @@ import type { Product } from "@/lib/types";
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
+  onProduct: vi.fn(),
   scanProductsLocalFirst: vi.fn(),
   decodeFromConstraints: vi.fn(),
   controlsStop: vi.fn(),
@@ -95,7 +96,10 @@ function renderScanner(props: Partial<React.ComponentProps<typeof BarcodeScanner
   return render(
     <BarcodeScanner
       onClose={props.onClose ?? vi.fn()}
+      onProduct={props.onProduct ?? mocks.onProduct}
       onMultipleResults={props.onMultipleResults ?? vi.fn()}
+      onCameraReady={props.onCameraReady}
+      purpose={props.purpose}
     />,
   );
 }
@@ -184,7 +188,7 @@ describe("camera unavailable", () => {
 });
 
 describe("successful decoding", () => {
-  it("navigates straight to a single matching product", async () => {
+  it("hands a single match back as a cached product, without navigating", async () => {
     mocks.scanProductsLocalFirst.mockResolvedValue({
       status: "match",
       match: { kind: "single", product: PRODUCT },
@@ -196,8 +200,29 @@ describe("successful decoding", () => {
     await emit("K10188-13");
 
     await waitFor(() => {
-      expect(mocks.push).toHaveBeenCalledWith("/products/K10188-13");
+      expect(mocks.onProduct).toHaveBeenCalledWith(PRODUCT);
     });
+    expect(mocks.push).not.toHaveBeenCalled();
+  });
+
+  it("reports the camera as ready once it is streaming", async () => {
+    const onCameraReady = vi.fn();
+    renderScanner({ onCameraReady });
+
+    await screen.findByText("Camera active — point at a barcode");
+    expect(onCameraReady).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores decoded values during a camera test", async () => {
+    const onCameraReady = vi.fn();
+    renderScanner({ purpose: "test", onCameraReady });
+
+    await screen.findByText("Camera works — offline scanning is ready");
+    await emit("K10188-13");
+
+    expect(onCameraReady).toHaveBeenCalledTimes(1);
+    expect(mocks.scanProductsLocalFirst).not.toHaveBeenCalled();
+    expect(mocks.onProduct).not.toHaveBeenCalled();
   });
 
   it("stops the camera as soon as a code is detected", async () => {
@@ -335,6 +360,7 @@ describe("manual entry", () => {
       match: { kind: "single", product: PRODUCT },
       source: "local",
     });
+    // The typed path resolves locally too, so no navigation is involved.
 
     renderScanner();
     await screen.findByText(/Camera access was blocked/);
@@ -354,7 +380,8 @@ describe("manual entry", () => {
     });
 
     await waitFor(() => {
-      expect(mocks.push).toHaveBeenCalledWith("/products/K10188-13");
+      expect(mocks.onProduct).toHaveBeenCalledWith(PRODUCT);
     });
+    expect(mocks.push).not.toHaveBeenCalled();
   });
 });

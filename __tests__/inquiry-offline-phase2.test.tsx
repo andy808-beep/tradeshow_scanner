@@ -487,7 +487,11 @@ describe("sync triggers", () => {
     await waitFor(() => {
       expect(mocks.createInquiryRequest).toHaveBeenCalled();
     });
-    expect(await screen.findByText("All inquiries synchronized")).toBeVisible();
+    expect(await screen.findByRole("link", { name: "View saved inquiry" })).toHaveAttribute(
+      "href",
+      "/inquiries/server-online",
+    );
+    expect(screen.getByText("All inquiries synchronized")).toBeVisible();
   });
 
   it("retries when the app returns to the foreground", async () => {

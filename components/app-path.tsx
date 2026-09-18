@@ -62,3 +62,38 @@ export function useAppPath(): AppPathValue {
 export function useAppPathOptional(): AppPathValue | null {
   return useContext(AppPathContext);
 }
+
+/** Native anchors keep booth screens on the cached shell. Next <Link> would fetch RSC. */
+export function ShellAnchor({
+  href,
+  className,
+  children,
+}: {
+  href: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  const appPath = useAppPathOptional();
+  return (
+    <a
+      href={href}
+      className={className}
+      onClick={(event) => {
+        if (
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey ||
+          event.button !== 0
+        ) {
+          return;
+        }
+        if (!appPath) return;
+        event.preventDefault();
+        appPath.navigate(href);
+      }}
+    >
+      {children}
+    </a>
+  );
+}

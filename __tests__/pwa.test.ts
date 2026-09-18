@@ -65,6 +65,7 @@ describe("service-worker registration", () => {
     expect(source).toMatch(/pathname\.startsWith\("\/api\/"\)/);
     expect(source).toMatch(/Authenticated application data must never enter the shell cache/);
     expect(source).toContain('pathname === "/inquiry"');
+    expect(source).toContain('pathname === "/inquiries"');
     expect(source).toMatch(/Inquiry API responses in particular stay out of Cache Storage/);
     expect(source).not.toMatch(/cache\.put\([^)]*\/api\/inquiries/);
     expect(source).not.toMatch(/SUPABASE_SECRET_KEY|SERVICE_ROLE/);

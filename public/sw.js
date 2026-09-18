@@ -51,6 +51,8 @@ function isAppShellPath(pathname) {
   return (
     pathname === "/" ||
     pathname === "/inquiry" ||
+    pathname === "/inquiries" ||
+    pathname.startsWith("/inquiries/") ||
     pathname === "/labels" ||
     pathname === "/login" ||
     pathname.startsWith("/products/")
@@ -114,7 +116,14 @@ async function networkFirstNavigation(request) {
     const byPath = await matchByPathname(cache, url.pathname);
     if (byPath) return byPath;
     const home = await cache.match("/");
-    if (home && url.pathname === "/inquiry") return home;
+    if (
+      home &&
+      (url.pathname === "/inquiry" ||
+        url.pathname === "/inquiries" ||
+        url.pathname.startsWith("/inquiries/"))
+    ) {
+      return home;
+    }
     if (home) return home;
     return new Response("Offline", { status: 503, statusText: "Offline" });
   }

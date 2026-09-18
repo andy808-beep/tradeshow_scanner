@@ -180,6 +180,7 @@ describe("authenticated application APIs", () => {
 
   it("does not expose update, append or delete inquiry endpoints", async () => {
     const inquiriesRoute = await import("@/app/api/inquiries/route");
+    expect(inquiriesRoute.GET).toEqual(expect.any(Function));
     expect(inquiriesRoute.POST).toEqual(expect.any(Function));
     expect(inquiriesRoute).not.toHaveProperty("PUT");
     expect(inquiriesRoute).not.toHaveProperty("PATCH");

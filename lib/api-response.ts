@@ -18,7 +18,7 @@ export function errorResponse(
 ): NextResponse<ApiErrorResponse> {
   return NextResponse.json(
     details && details.length > 0 ? { error: message, details } : { error: message },
-    { status },
+    { status, headers: { "Cache-Control": "private, no-store" } },
   );
 }
 

@@ -4,6 +4,8 @@ import type {
   CreateInquiryResponse,
   ProductResponse,
   ProductSearchResponse,
+  SavedInquiryDetail,
+  SavedInquiryListResponse,
 } from "./api-contract";
 import type { Product } from "./types";
 
@@ -88,4 +90,51 @@ export async function createInquiryRequest(
 
   const data = (await response.json()) as CreateInquiryResponse;
   return data.inquiryId;
+}
+
+export async function listSavedInquiriesRequest(
+  params: string,
+  signal?: AbortSignal,
+): Promise<SavedInquiryListResponse> {
+  const suffix = params === "" ? "" : `?${params}`;
+  const response = await fetch(`/api/inquiries${suffix}`, {
+    signal,
+    cache: "no-store",
+    credentials: "same-origin",
+  });
+  if (!response.ok) throw await toApiError(response);
+  return (await response.json()) as SavedInquiryListResponse;
+}
+
+export async function getSavedInquiryRequest(
+  id: string,
+  signal?: AbortSignal,
+): Promise<SavedInquiryDetail> {
+  const response = await fetch(`/api/inquiries/${encodeURIComponent(id)}`, {
+    signal,
+    cache: "no-store",
+    credentials: "same-origin",
+  });
+  if (!response.ok) throw await toApiError(response);
+  const data = (await response.json()) as { inquiry: SavedInquiryDetail };
+  return data.inquiry;
+}
+
+export async function exportSavedInquiriesRequest(
+  params: string,
+  signal?: AbortSignal,
+): Promise<{ blob: Blob; filename: string }> {
+  const suffix = params === "" ? "" : `?${params}`;
+  const response = await fetch(`/api/inquiries/export${suffix}`, {
+    signal,
+    cache: "no-store",
+    credentials: "same-origin",
+  });
+  if (!response.ok) throw await toApiError(response);
+  const header = response.headers.get("content-disposition") ?? "";
+  const match = /filename="([^"]+)"/.exec(header);
+  return {
+    blob: await response.blob(),
+    filename: match?.[1] ?? "saved-inquiries.csv",
+  };
 }

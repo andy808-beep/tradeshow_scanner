@@ -71,7 +71,14 @@ describe("path classification", () => {
   });
 
   it("protects the booth pages", () => {
-    for (const path of ["/", "/inquiry", "/labels", "/products/K10188-13"]) {
+    for (const path of [
+      "/",
+      "/inquiry",
+      "/inquiries",
+      "/inquiries/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "/labels",
+      "/products/K10188-13",
+    ]) {
       expect(shouldRedirectUnauthenticatedPage(path)).toBe(true);
     }
   });

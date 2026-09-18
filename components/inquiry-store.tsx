@@ -21,7 +21,7 @@ import {
   type InquiryConfirmationSnapshot,
   type InquiryDraftRecord,
 } from "@/lib/offline/inquiry-draft";
-import { enqueueOutboxSnapshot } from "@/lib/offline/inquiry-outbox";
+import { enqueueOutboxSnapshot, readOutboxRecord } from "@/lib/offline/inquiry-outbox";
 import { isOnline } from "@/lib/offline/lookup";
 import { syncInquiryOutbox } from "@/lib/offline/inquiry-sync";
 
@@ -49,6 +49,7 @@ interface InquiryContextValue {
   setLineNotes: (productId: string, notes: string) => void;
   updateCustomer: (patch: Partial<CustomerDetails>) => void;
   saveInquiry: () => Promise<{ ok: true } | { ok: false; message: string; details: string[] }>;
+  refreshConfirmation: () => Promise<void>;
   clearInquiry: () => void;
 }
 
@@ -276,7 +277,6 @@ export function InquiryProvider({ children }: { children: React.ReactNode }) {
       if (isOnline()) {
         const result = await syncInquiryOutbox(true);
         if (result.synchronized > 0) {
-          const { readOutboxRecord } = await import("@/lib/offline/inquiry-outbox");
           const row = await readOutboxRecord(clientSubmissionId);
           if (row?.status === "synchronized" && row.serverInquiryId) {
             patchRecord((current) => ({
@@ -305,6 +305,46 @@ export function InquiryProvider({ children }: { children: React.ReactNode }) {
     return { ok: true };
   }, [locked, lines, customer, currency, patchRecord]);
 
+  const refreshConfirmation = useCallback(async () => {
+    if (!confirmation?.clientSubmissionId) return;
+    if (confirmation.source === "synced" && confirmation.inquiryId) return;
+    const clientSubmissionId = confirmation.clientSubmissionId;
+    try {
+      const row = await readOutboxRecord(clientSubmissionId);
+      if (row?.status !== "synchronized" || !row.serverInquiryId) return;
+      const serverInquiryId = row.serverInquiryId;
+      patchRecord((existing) => ({
+        ...existing,
+        confirmation:
+          existing.confirmation &&
+          existing.confirmation.clientSubmissionId === clientSubmissionId
+            ? {
+                ...existing.confirmation,
+                source: "synced",
+                inquiryId: serverInquiryId,
+              }
+            : existing.confirmation,
+      }));
+    } catch {
+      // Confirmation is a convenience link; the outbox remains the source of truth.
+    }
+  }, [confirmation, patchRecord]);
+
+  useEffect(() => {
+    if (!ready) return;
+    const timer = window.setTimeout(() => {
+      void refreshConfirmation();
+    }, 0);
+    function onOnline() {
+      void refreshConfirmation();
+    }
+    window.addEventListener("online", onOnline);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("online", onOnline);
+    };
+  }, [ready, refreshConfirmation]);
+
   const clearInquiry = useCallback(() => {
     persistIdRef.current += 1;
     const now = Date.now();
@@ -329,6 +369,7 @@ export function InquiryProvider({ children }: { children: React.ReactNode }) {
       setLineNotes,
       updateCustomer,
       saveInquiry,
+      refreshConfirmation,
       clearInquiry,
     }),
     [
@@ -343,6 +384,7 @@ export function InquiryProvider({ children }: { children: React.ReactNode }) {
       setLineNotes,
       updateCustomer,
       saveInquiry,
+      refreshConfirmation,
       clearInquiry,
     ],
   );

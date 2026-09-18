@@ -108,6 +108,14 @@ export default function InquiryScreen() {
               </div>
             )}
           </dl>
+          {confirmation.inquiryId && (
+            <ShellHref
+              href={`/inquiries/${confirmation.inquiryId}`}
+              className="mt-4 block w-full rounded-xl border border-emerald-400 px-4 py-3 text-center text-sm font-semibold text-emerald-900"
+            >
+              View saved inquiry
+            </ShellHref>
+          )}
           <button
             type="button"
             onClick={startNextInquiry}

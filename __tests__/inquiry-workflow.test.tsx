@@ -274,6 +274,10 @@ describe("submission", () => {
     expect(screen.getByText("Koei")).toBeVisible();
     expect(screen.getByText("1 product recorded")).toBeVisible();
     expect(screen.getByText("inquiry-99")).toBeVisible();
+    expect(screen.getByRole("link", { name: "View saved inquiry" })).toHaveAttribute(
+      "href",
+      "/inquiries/inquiry-99",
+    );
     expect(screen.getByRole("button", { name: "Start next inquiry" })).toBeVisible();
 
     expect(screen.queryByRole("button", { name: "Save inquiry" })).toBeNull();
@@ -328,6 +332,7 @@ describe("submission", () => {
     expect(
       await screen.findByText("Inquiry saved on this device — awaiting synchronization."),
     ).toBeVisible();
+    expect(screen.queryByRole("link", { name: "View saved inquiry" })).toBeNull();
     expect(screen.queryByLabelText(/Name/)).toBeNull();
     expect(screen.getByRole("button", { name: "Start next inquiry" })).toBeVisible();
 

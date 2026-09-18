@@ -41,6 +41,57 @@ export interface CreateInquiryResponse {
   inquiryId: string;
 }
 
+export interface SavedInquiryListItem {
+  id: string;
+  savedAt: string;
+  customerName: string;
+  companyName: string | null;
+  productCount: number;
+  currency: string;
+  hasNotes: boolean;
+}
+
+export interface SavedInquiryListResponse {
+  inquiries: SavedInquiryListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface SavedInquiryLine {
+  productCode: string;
+  productName: string | null;
+  quotedUnitPrice: number;
+  notes: string | null;
+}
+
+export interface SavedInquiryDetail {
+  id: string;
+  savedAt: string;
+  customerName: string;
+  companyName: string | null;
+  notes: string | null;
+  currency: string;
+  items: SavedInquiryLine[];
+}
+
+export interface SavedInquiryDetailResponse {
+  inquiry: SavedInquiryDetail;
+}
+
+export interface SavedInquiryExportRow {
+  inquiryId: string;
+  savedAt: string;
+  customerName: string;
+  companyName: string;
+  generalNotes: string;
+  currency: string;
+  productCode: string;
+  productName: string;
+  quotedUnitPrice: string;
+  productNotes: string;
+}
+
 export interface ApiErrorResponse {
   error: string;
   details?: string[];

@@ -24,6 +24,7 @@ describe("service-role key stays off the browser", () => {
   it("marks the admin client server-only", () => {
     expect(read("lib/supabase/admin.ts")).toMatch(/import "server-only"/);
     expect(read("lib/supabase/server.ts")).toMatch(/import "server-only"/);
+    expect(read("lib/supabase/saved-inquiries.ts")).toMatch(/import "server-only"/);
     expect(read("lib/auth/session.ts")).toMatch(/import "server-only"/);
   });
 
@@ -34,6 +35,7 @@ describe("service-role key stays off the browser", () => {
     for (const file of files) {
       const source = readFileSync(file, "utf8");
       expect(source).not.toMatch(/supabase\/admin/);
+      expect(source).not.toMatch(/supabase\/saved-inquiries/);
       expect(source).not.toMatch(/SUPABASE_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY/);
     }
   });

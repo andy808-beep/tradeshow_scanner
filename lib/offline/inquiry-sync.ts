@@ -131,7 +131,7 @@ export async function cacheAppShellPages(): Promise<void> {
   try {
     const cache = await caches.open(SHELL_CACHE_NAME);
     await Promise.all(
-      ["/", "/inquiry", "/labels"].map(async (path) => {
+      ["/", "/inquiry", "/labels", "/inquiries"].map(async (path) => {
         const response = await fetch(path, { credentials: "same-origin" });
         if (response.ok) await cache.put(path, response.clone());
       }),

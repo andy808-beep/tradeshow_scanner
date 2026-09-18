@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 import { useAppPath } from "./app-path";
 import InquiryScreen from "./inquiry-screen";
 import LabelsScreen from "./labels-screen";
+import SavedInquiriesScreen from "./saved-inquiries-screen";
+import SavedInquiryDetailScreen from "./saved-inquiry-detail-screen";
 import SearchPanel from "./search-panel";
 
 /**
@@ -16,6 +18,10 @@ export default function AppScreens({ children }: { children: ReactNode }) {
 
   if (path === "/inquiry") return <InquiryScreen />;
   if (path === "/labels") return <LabelsScreen />;
+  if (path === "/inquiries") return <SavedInquiriesScreen />;
+  if (path.startsWith("/inquiries/")) {
+    return <SavedInquiryDetailScreen id={path.slice("/inquiries/".length)} />;
+  }
   if (path === "/") return <SearchPanel />;
   return <>{children}</>;
 }

@@ -11,12 +11,15 @@ import {
 } from "@/lib/offline/inquiry-outbox";
 import { cacheAppShellPages, syncInquiryOutbox } from "@/lib/offline/inquiry-sync";
 import { useCatalogue } from "./catalogue-provider";
+import { useInquiry } from "./inquiry-store";
 
 export default function InquirySyncStatus() {
   const { online } = useCatalogue();
+  const { refreshConfirmation } = useInquiry();
   const [pending, setPending] = useState(0);
   const [attention, setAttention] = useState(0);
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
+  const [savedInquiryHref, setSavedInquiryHref] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [signInNeeded, setSignInNeeded] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -26,6 +29,10 @@ export default function InquirySyncStatus() {
     setPending(pendingOutboxCount(rows));
     setAttention(attentionOutboxCount(rows));
     setLastSyncedAt(meta?.lastInquirySyncedAt ?? null);
+    const latest = rows
+      .filter((row) => row.status === "synchronized" && row.serverInquiryId)
+      .sort((left, right) => (right.syncedAt ?? 0) - (left.syncedAt ?? 0))[0];
+    setSavedInquiryHref(latest?.serverInquiryId ? `/inquiries/${latest.serverInquiryId}` : null);
   }
 
   async function runSync() {
@@ -41,6 +48,7 @@ export default function InquirySyncStatus() {
         setNotice(null);
       }
       await refresh();
+      await refreshConfirmation();
     } finally {
       setSyncing(false);
     }
@@ -110,6 +118,14 @@ export default function InquirySyncStatus() {
       )}
       {notice && !signInNeeded && (
         <p className="mt-1 text-[11px] font-medium text-emerald-800">{notice}</p>
+      )}
+      {online && savedInquiryHref && (
+        <a
+          href={savedInquiryHref}
+          className="mt-1 inline-block text-[11px] font-semibold text-porcelain-800"
+        >
+          View saved inquiry
+        </a>
       )}
       <p className="mt-1 text-[10px] leading-snug text-porcelain-500">
         Cached inquiry drafts on an unlocked authorized device can be read until

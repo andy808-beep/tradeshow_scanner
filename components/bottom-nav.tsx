@@ -16,7 +16,8 @@ export default function BottomNav() {
 
   const onInquiry = path === "/inquiry";
   const onLabels = path === "/labels";
-  const onSearch = !onInquiry && !onLabels;
+  const onSaved = path === "/inquiries" || path.startsWith("/inquiries/");
+  const onSearch = !onInquiry && !onLabels && !onSaved;
 
   function handleNav(event: React.MouseEvent<HTMLAnchorElement>, href: string) {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
@@ -53,6 +54,16 @@ export default function BottomNav() {
               {lines.length}
             </span>
           )}
+        </a>
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- client shell navigation */}
+        <a
+          href="/inquiries"
+          onClick={(event) => handleNav(event, "/inquiries")}
+          className={navClasses(onSaved)}
+          aria-current={onSaved ? "page" : undefined}
+        >
+          <span aria-hidden>📁</span>
+          Saved
         </a>
         <a
           href="/labels"

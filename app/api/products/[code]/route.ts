@@ -18,5 +18,8 @@ export const GET = withAuthenticatedApi(async (
     return errorResponse(`No active product with code ${code}.`, 404);
   }
 
-  return NextResponse.json<ProductResponse>({ product });
+  return NextResponse.json<ProductResponse>(
+    { product },
+    { headers: { "Cache-Control": "private, no-store" } },
+  );
 });

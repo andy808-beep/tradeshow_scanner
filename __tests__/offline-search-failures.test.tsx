@@ -36,7 +36,7 @@ vi.mock("next/navigation", () => ({
 const { CatalogueProvider } = await import("@/components/catalogue-provider");
 const { InquiryProvider } = await import("@/components/inquiry-store");
 const { default: SearchPanel } = await import("@/components/search-panel");
-const { syncProductCatalogue } = await import("@/lib/offline/sync");
+const { resetCatalogueSyncForTests, syncProductCatalogue } = await import("@/lib/offline/sync");
 
 const PRODUCT: Product = {
   id: "e4247a2f-1e3b-4d64-a05f-ab38906b5292",
@@ -85,6 +85,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  resetCatalogueSyncForTests();
 });
 
 describe("a rejected IndexedDB read is visible, not swallowed", () => {

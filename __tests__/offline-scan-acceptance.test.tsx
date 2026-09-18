@@ -45,6 +45,7 @@ const { default: SearchPanel } = await import("@/components/search-panel");
 const { READINESS_MESSAGES } = await import("@/lib/offline/constants");
 const { clearAllLocalData, readOfflineReadiness } = await import("@/lib/offline/db");
 const { resetScannerPreloadForTests } = await import("@/lib/offline/scanner-assets");
+const { resetCatalogueSyncForTests } = await import("@/lib/offline/sync");
 
 const PRODUCT: Product = {
   id: "e4247a2f-1e3b-4d64-a05f-ab38906b5292",
@@ -127,6 +128,7 @@ afterEach(async () => {
   // deleting the database would block on it and stall the next test.
   await clearAllLocalData();
   resetScannerPreloadForTests();
+  resetCatalogueSyncForTests();
   vi.unstubAllGlobals();
 });
 
@@ -141,9 +143,8 @@ describe("offline scan acceptance", () => {
       </InquiryProvider>,
     );
 
-    // 1. Sync products online, without ever opening Scan.
+    // 1. Authenticated startup refreshes the catalogue without opening Scan.
     expect(await screen.findByText("Online")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Sync products" }));
     expect(await screen.findByText(/2 products/)).toBeVisible();
 
     // 2. Scanner and decoder chunks were preloaded by the sync itself.
@@ -213,7 +214,6 @@ describe("offline scan acceptance", () => {
       </InquiryProvider>,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Sync products" }));
     expect(await screen.findByText(/2 products/)).toBeVisible();
     // The camera test is only offered once the scanner chunks are cached.
     expect(await screen.findByRole("button", { name: "Test camera" })).toBeVisible();
@@ -230,7 +230,6 @@ describe("offline scan acceptance", () => {
       </InquiryProvider>,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Sync products" }));
     expect(await screen.findByText(/2 products/)).toBeVisible();
     await act(async () => {
       setNetwork(false);

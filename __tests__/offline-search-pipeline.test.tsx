@@ -21,7 +21,7 @@ import {
   lookupLocalScan,
   lookupLocalSearch,
 } from "@/lib/offline/lookup";
-import { syncProductCatalogue } from "@/lib/offline/sync";
+import { resetCatalogueSyncForTests, syncProductCatalogue } from "@/lib/offline/sync";
 import type { Product } from "@/lib/types";
 
 vi.mock("@/lib/auth/actions", () => ({
@@ -131,6 +131,7 @@ afterEach(async () => {
   // Stores are emptied rather than the database deleted: a delete would block
   // on connections this file keeps open and stall the next test.
   await clearAllLocalData();
+  resetCatalogueSyncForTests();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -228,8 +229,8 @@ describe("offline search queries the local catalogue only", () => {
   });
 
   it("asks for a sync when no catalogue exists", async () => {
-    renderApp(<SearchPanel />);
     await goOffline();
+    renderApp(<SearchPanel />);
 
     typeQuery("K10188-13");
     expect(await screen.findByText("Catalogue not synchronized")).toBeVisible();

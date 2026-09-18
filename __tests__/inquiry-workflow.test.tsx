@@ -10,6 +10,7 @@ import { ApiError } from "@/lib/api-client";
 import { clearAllLocalData, replaceCatalogue, resetCatalogueDbForTests } from "@/lib/offline/db";
 import { listOutbox } from "@/lib/offline/inquiry-outbox";
 import { resetInquirySyncForTests } from "@/lib/offline/inquiry-sync";
+import { resetCatalogueSyncForTests } from "@/lib/offline/sync";
 import type { Product } from "@/lib/types";
 
 const mocks = vi.hoisted(() => ({
@@ -115,6 +116,7 @@ afterEach(async () => {
   cleanup();
   vi.clearAllMocks();
   resetInquirySyncForTests();
+  resetCatalogueSyncForTests();
   await clearAllLocalData();
   resetCatalogueDbForTests();
 });

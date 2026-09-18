@@ -10,6 +10,7 @@ import {
   lookupLocalSearch,
   refreshSearchFromApi,
   scanProductsLocalFirst,
+  searchProductsLocalFirst,
 } from "@/lib/offline/lookup";
 import { LOOKUP_MESSAGES } from "@/lib/offline/constants";
 import type { CatalogueAccess } from "@/lib/offline/authorization";
@@ -82,6 +83,34 @@ describe("offline search", () => {
     });
   });
 
+  it("searches the product API when the local catalogue is missing", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : String(input);
+        expect(url).toBe("/api/products?q=Abbesses");
+        expect(init).toMatchObject({ cache: "no-store", credentials: "same-origin" });
+        return new Response(JSON.stringify({ products: [K10188] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
+    const result = await searchProductsLocalFirst(
+      [],
+      { kind: "missing" },
+      "Abbesses",
+      undefined,
+      true,
+    );
+    expect(result).toEqual({
+      status: "ready",
+      products: [K10188],
+      source: "network",
+    });
+    vi.unstubAllGlobals();
+  });
+
   it("reports a failed network refresh as no refresh, leaving local results", async () => {
     vi.stubGlobal(
       "fetch",
@@ -136,6 +165,21 @@ describe("offline product-code lookup and details", () => {
     });
   });
 
+  it("loads a product from the API when the local catalogue is missing", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        return new Response(JSON.stringify({ product: K10188 }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
+    const result = await getProductLocalFirst([], { kind: "missing" }, "K10188-13", true);
+    expect(result).toEqual({ status: "ready", product: K10188, source: "network" });
+    vi.unstubAllGlobals();
+  });
+
   it("says the network is unavailable when there is no local row", async () => {
     vi.stubGlobal(
       "fetch",
@@ -178,6 +222,33 @@ describe("offline barcode scan lookup", () => {
       false,
     );
     expect(result).toMatchObject({ status: "error", reason: "unsynced" });
+  });
+
+  it("looks up a barcode through the product API when IndexedDB is empty", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : String(input);
+        expect(url).toBe("/api/products?q=K10188-13");
+        return new Response(JSON.stringify({ products: [K10188] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
+    const result = await scanProductsLocalFirst(
+      [],
+      { kind: "missing" },
+      "K10188-13",
+      new AbortController().signal,
+      true,
+    );
+    expect(result).toEqual({
+      status: "match",
+      match: { kind: "single", product: K10188 },
+      source: "network",
+    });
+    vi.unstubAllGlobals();
   });
 });
 

@@ -9,5 +9,8 @@ export const dynamic = "force-dynamic";
 export const GET = withAuthenticatedApi(async (request: Request) => {
   const query = new URL(request.url).searchParams.get("q") ?? "";
   const products = await searchProducts(query);
-  return NextResponse.json<ProductSearchResponse>({ products });
+  return NextResponse.json<ProductSearchResponse>(
+    { products },
+    { headers: { "Cache-Control": "private, no-store" } },
+  );
 });

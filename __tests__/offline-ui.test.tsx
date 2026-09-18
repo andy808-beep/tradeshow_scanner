@@ -7,7 +7,6 @@ import { InquiryProvider } from "@/components/inquiry-store";
 import LogoutButton from "@/components/logout-button";
 import ProductDetailScreen from "@/components/product-detail-screen";
 import SearchPanel from "@/components/search-panel";
-import { LOOKUP_MESSAGES } from "@/lib/offline/constants";
 import {
   clearAllLocalData,
   readCatalogueMeta,
@@ -16,6 +15,7 @@ import {
 } from "@/lib/offline/db";
 import { writeInquiryDraft, readInquiryDraft } from "@/lib/offline/inquiry-draft";
 import { enqueueOutboxSnapshot, listOutbox } from "@/lib/offline/inquiry-outbox";
+import { resetCatalogueSyncForTests } from "@/lib/offline/sync";
 import type { Product } from "@/lib/types";
 
 const PRODUCT: Product = {
@@ -56,6 +56,7 @@ afterEach(async () => {
   // Emptying the stores, rather than deleting the database, keeps the single
   // connection this file opens alive so the next test cannot block on it.
   await clearAllLocalData();
+  resetCatalogueSyncForTests();
   vi.unstubAllGlobals();
   goOnline();
 });
@@ -77,7 +78,9 @@ describe("online/offline status", () => {
 
   it("warns when no offline catalogue exists", async () => {
     renderCatalogue(<CatalogueStatus />);
-    expect(await screen.findByText(LOOKUP_MESSAGES.unsynced, { exact: false })).toBeVisible();
+    expect(
+      await screen.findByText(/Search and scan still work online\. Sync products to use them offline/),
+    ).toBeVisible();
     expect(screen.getByText(/Anyone with this unlocked authorized device can read cached prices/)).toBeVisible();
   });
 
@@ -160,6 +163,7 @@ describe("offline product details", () => {
 
   it("blocks prices after the seven-day offline window", async () => {
     await replaceCatalogue([PRODUCT], { lastSyncedAt: 1, count: 1 });
+    goOffline();
     renderCatalogue(<ProductDetailScreen code="K10188-13" />);
     expect(await screen.findByText("Offline access expired")).toBeVisible();
     expect(screen.queryByRole("heading", { name: "大方盘·紫" })).toBeNull();

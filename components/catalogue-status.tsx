@@ -59,7 +59,10 @@ export default function CatalogueStatus() {
         </p>
       ) : (
         <p className="mt-1 text-[11px] leading-snug text-amber-900">
-          No offline catalogue on this device. {LOOKUP_MESSAGES.unsynced}
+          No offline catalogue on this device.{" "}
+          {online
+            ? "Search and scan still work online. Sync products to use them offline."
+            : LOOKUP_MESSAGES.unsynced}
         </p>
       )}
 
@@ -88,7 +91,13 @@ export default function CatalogueStatus() {
       )}
 
       {syncError && (
-        <p className="mt-1 text-[11px] font-medium text-red-800">{syncError}</p>
+        <p
+          className={`mt-1 text-[11px] font-medium ${
+            access.kind === "ready" ? "text-amber-800" : "text-red-800"
+          }`}
+        >
+          {syncError}
+        </p>
       )}
 
       <p className="mt-1 text-[10px] leading-snug text-porcelain-500">

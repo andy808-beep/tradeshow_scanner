@@ -30,6 +30,8 @@ export const LOOKUP_MESSAGES = {
     "Offline access has expired. Sign in while online and sync products again to see prices.",
   network: "The network is unavailable. Cached products are still shown when a catalogue exists.",
   syncFailed: "Synchronization failed. The previous catalogue on this device was kept.",
+  syncFailedRetry:
+    "Synchronization failed. Search and scan still work online. Tap Sync products to retry.",
   notFoundLocal: "No match in synchronized catalogue.",
   localUnavailable:
     "The offline catalogue on this device could not be read. Sync products while online.",

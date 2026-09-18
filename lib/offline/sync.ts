@@ -9,6 +9,11 @@ import {
   type CatalogueSnapshot,
 } from "./db";
 
+export type CatalogueSyncResult = { products: Product[]; meta: CatalogueMeta };
+
+let inFlight: Promise<CatalogueSyncResult> | null = null;
+let backgroundRequested = false;
+
 function isProduct(value: unknown): value is Product {
   if (typeof value !== "object" || value === null) return false;
   const record = value as Record<string, unknown>;
@@ -30,7 +35,10 @@ export class CatalogueVerificationError extends Error {
 export async function fetchProductCatalogue(
   fetcher: typeof fetch = fetch,
 ): Promise<Product[]> {
-  const response = await fetcher("/api/products/catalogue", { cache: "no-store" });
+  const response = await fetcher("/api/products/catalogue", {
+    cache: "no-store",
+    credentials: "same-origin",
+  });
   if (!response.ok) {
     let message = "The product catalogue could not be downloaded.";
     try {
@@ -71,11 +79,49 @@ function verifySnapshot(snapshot: CatalogueSnapshot, expected: number): void {
  * Downloads the full catalogue, writes it atomically, then reads it back and
  * verifies it before reporting success. Any failure — download, write or
  * verification — restores the previously stored catalogue.
+ *
+ * Concurrent callers share one in-flight request so startup refresh and a
+ * manual Sync tap cannot download the catalogue twice at the same time.
  */
 export async function syncProductCatalogue(
   now = Date.now(),
   fetcher: typeof fetch = fetch,
-): Promise<{ products: Product[]; meta: CatalogueMeta }> {
+): Promise<CatalogueSyncResult> {
+  if (inFlight) return inFlight;
+
+  const pending = runProductCatalogueSync(now, fetcher).finally(() => {
+    if (inFlight === pending) inFlight = null;
+  });
+  inFlight = pending;
+  return pending;
+}
+
+/**
+ * One automatic refresh after authenticated startup while online. Later
+ * calls join the in-flight request or no-op once that attempt has started.
+ * Manual {@link syncProductCatalogue} is unaffected after it settles.
+ */
+export function requestBackgroundCatalogueSync(
+  now = Date.now(),
+  fetcher: typeof fetch = fetch,
+): Promise<CatalogueSyncResult> | null {
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    return null;
+  }
+  if (backgroundRequested) return inFlight;
+  backgroundRequested = true;
+  return syncProductCatalogue(now, fetcher);
+}
+
+export function resetCatalogueSyncForTests(): void {
+  inFlight = null;
+  backgroundRequested = false;
+}
+
+async function runProductCatalogueSync(
+  now: number,
+  fetcher: typeof fetch,
+): Promise<CatalogueSyncResult> {
   const previous = await readCatalogueSnapshot();
 
   try {

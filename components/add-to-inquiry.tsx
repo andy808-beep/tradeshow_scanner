@@ -24,7 +24,7 @@ export default function AddToInquiry({
 
   function handleAdd() {
     if (line) return;
-    if (access && access.kind !== "ready") {
+    if (access && access.kind !== "ready" && !catalogue?.online) {
       setRejection(
         access.kind === "expired" ? LOOKUP_MESSAGES.expired : LOOKUP_MESSAGES.unsynced,
       );

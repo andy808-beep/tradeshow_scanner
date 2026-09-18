@@ -39,6 +39,8 @@ export async function searchProductsRequest(
 ): Promise<Product[]> {
   const response = await fetch(`/api/products?q=${encodeURIComponent(query)}`, {
     signal,
+    cache: "no-store",
+    credentials: "same-origin",
   });
 
   if (!response.ok) throw await toApiError(response);
@@ -61,7 +63,10 @@ export async function listLabelProductsRequest(
 }
 
 export async function getProductByCodeRequest(code: string): Promise<Product | null> {
-  const response = await fetch(`/api/products/${encodeURIComponent(code)}`);
+  const response = await fetch(`/api/products/${encodeURIComponent(code)}`, {
+    cache: "no-store",
+    credentials: "same-origin",
+  });
   if (response.status === 404) return null;
   if (!response.ok) throw await toApiError(response);
   const data = (await response.json()) as ProductResponse;

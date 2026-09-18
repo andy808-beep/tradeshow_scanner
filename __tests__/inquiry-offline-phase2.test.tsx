@@ -24,6 +24,7 @@ import {
   writeOutboxRecord,
 } from "@/lib/offline/inquiry-outbox";
 import { resetInquirySyncForTests, syncInquiryOutbox } from "@/lib/offline/inquiry-sync";
+import { resetCatalogueSyncForTests } from "@/lib/offline/sync";
 import type { Product } from "@/lib/types";
 
 const mocks = vi.hoisted(() => ({
@@ -139,6 +140,7 @@ afterEach(async () => {
   cleanup();
   vi.clearAllMocks();
   resetInquirySyncForTests();
+  resetCatalogueSyncForTests();
   await clearAllLocalData();
   resetCatalogueDbForTests();
   goOnline();

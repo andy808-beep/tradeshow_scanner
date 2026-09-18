@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   inspectCatalogueAccess,
   isOfflineCatalogueAuthorized,
@@ -12,7 +12,7 @@ import {
   replaceCatalogue,
   resetCatalogueDbForTests,
 } from "@/lib/offline/db";
-import { syncProductCatalogue } from "@/lib/offline/sync";
+import { resetCatalogueSyncForTests, syncProductCatalogue } from "@/lib/offline/sync";
 import type { Product } from "@/lib/types";
 
 const PRICED: Product = {
@@ -38,6 +38,7 @@ const UNPRICED: Product = {
 afterEach(async () => {
   await clearConfidentialLocalData();
   resetCatalogueDbForTests();
+  resetCatalogueSyncForTests();
 });
 
 describe("atomic full-catalogue sync", () => {
@@ -91,6 +92,28 @@ describe("atomic full-catalogue sync", () => {
     expect(meta).toEqual({ lastSyncedAt: 50, count: 0 });
     await expect(readCatalogueProducts()).resolves.toEqual([]);
     expect(inspectCatalogueAccess(meta, 50).kind).toBe("ready");
+  });
+
+  it("shares one in-flight download across concurrent callers", async () => {
+    let settle: ((response: Response) => void) | undefined;
+    const fetcher = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          settle = resolve;
+        }),
+    );
+
+    const first = syncProductCatalogue(1, fetcher);
+    const second = syncProductCatalogue(2, fetcher);
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+
+    settle!(
+      new Response(JSON.stringify({ products: [PRICED], count: 1 }), { status: 200 }),
+    );
+    const [a, b] = await Promise.all([first, second]);
+    expect(a).toEqual(b);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    await expect(readCatalogueProducts()).resolves.toEqual([PRICED]);
   });
 });
 

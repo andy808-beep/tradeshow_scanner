@@ -36,8 +36,12 @@ export default function SearchPanel() {
     null,
   );
   const [refreshingQuery, setRefreshingQuery] = useState<string | null>(null);
+  const [networkError, setNetworkError] = useState<{ query: string; message: string } | null>(
+    null,
+  );
 
   const trimmed = query.trim();
+  const localUsable = access.kind === "ready";
 
   /**
    * The local catalogue is searched during render. There is no awaited promise
@@ -48,10 +52,11 @@ export default function SearchPanel() {
     [access, catalogue, trimmed],
   );
 
-  // Optional refresh once local results are already on screen. Bounded and
-  // abortable: failure or a stall simply leaves the local results in place.
+  // Online: optional refresh when the local catalogue is valid, or a primary
+  // search when it is missing/expired. Bounded and abortable so a stall cannot
+  // block the screen. Local results, when present, stay on screen.
   useEffect(() => {
-    if (trimmed === "" || !online || access.kind !== "ready") return;
+    if (trimmed === "" || !online) return;
 
     let cancelled = false;
     const controller = new AbortController();
@@ -60,10 +65,19 @@ export default function SearchPanel() {
       void (async () => {
         try {
           const products = await refreshSearchFromApi(trimmed, controller.signal);
-          if (cancelled || products === null) return;
+          if (cancelled) return;
+          if (products === null) {
+            if (!localUsable) {
+              setNetworkError({ query: trimmed, message: LOOKUP_MESSAGES.network });
+            }
+            return;
+          }
+          setNetworkError(null);
           setRefreshed({ query: trimmed, products });
         } catch {
-          // Local results stay on screen. A rejected refresh is not an error.
+          if (!cancelled && !localUsable) {
+            setNetworkError({ query: trimmed, message: LOOKUP_MESSAGES.network });
+          }
         } finally {
           if (!cancelled) setRefreshingQuery(null);
         }
@@ -75,7 +89,7 @@ export default function SearchPanel() {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [access, online, trimmed]);
+  }, [localUsable, online, trimmed]);
 
   function showScanResults(rawValue: string, products: Product[]) {
     setScannerOpen(false);
@@ -96,20 +110,33 @@ export default function SearchPanel() {
   const products =
     refreshed?.query === trimmed
       ? refreshed.products
-      : local?.status === "ready"
+      : localUsable && local?.status === "ready"
         ? local.products
         : [];
 
-  // Every query ends in one of these four states. There is no "searching"
-  // state: local lookup is synchronous, so a spinner cannot be left behind.
+  const waitingForNetwork =
+    trimmed !== "" &&
+    online &&
+    !localUsable &&
+    refreshed?.query !== trimmed &&
+    networkError?.query !== trimmed;
+
+  // Local lookup is synchronous. The only waiting state is an online search
+  // while this device has no usable catalogue; that request is bounded.
   const phase =
     trimmed === ""
       ? "idle"
-      : local?.status === "error"
-        ? "error"
-        : products.length > 0
-          ? "results"
-          : "empty";
+      : waitingForNetwork
+        ? "searching"
+        : !localUsable && !online && local?.status === "error"
+          ? "error"
+          : !localUsable && online && networkError?.query === trimmed
+            ? "error"
+            : localUsable && local?.status === "error"
+              ? "error"
+              : products.length > 0
+                ? "results"
+                : "empty";
 
   return (
     <div className="space-y-4">
@@ -152,16 +179,31 @@ export default function SearchPanel() {
         {phase === "idle" && (
           <p className="px-1 text-sm text-porcelain-500">
             Search by product code (for example K10188-13), barcode, or Chinese or
-            English name. Sync the catalogue before looking up prices.
+            English name.
           </p>
         )}
 
-        {phase === "error" && local?.status === "error" && (
+        {phase === "searching" && (
+          <p className="rounded-xl border border-dashed border-porcelain-300 bg-porcelain-50 px-4 py-6 text-center text-sm text-porcelain-600">
+            Searching…
+          </p>
+        )}
+
+        {phase === "error" && (
           <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-4 text-sm text-amber-900">
-            <p className="font-semibold">
-              {ERROR_TITLES[local.reason] ?? "Unavailable"}
-            </p>
-            <p className="mt-1">{local.message}</p>
+            {networkError?.query === trimmed ? (
+              <>
+                <p className="font-semibold">{ERROR_TITLES.network}</p>
+                <p className="mt-1">{networkError.message}</p>
+              </>
+            ) : local?.status === "error" ? (
+              <>
+                <p className="font-semibold">
+                  {ERROR_TITLES[local.reason] ?? "Unavailable"}
+                </p>
+                <p className="mt-1">{local.message}</p>
+              </>
+            ) : null}
           </div>
         )}
 

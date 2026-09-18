@@ -148,8 +148,9 @@ export async function refreshProductFromApi(code: string): Promise<Product | nul
 }
 
 /**
- * Product details for a code. The cached copy wins immediately; the API is
- * only consulted when this device has no local record for the code.
+ * Product details for a code. A valid cached copy wins immediately; the
+ * authenticated product API is used when the local catalogue is missing,
+ * expired, or does not contain the code.
  */
 export async function getProductLocalFirst(
   products: Product[],
@@ -159,8 +160,6 @@ export async function getProductLocalFirst(
 ): Promise<LocalFirstProduct> {
   const local = lookupLocalProduct(products, access, code);
   if (local.status === "ready") return local;
-  if (local.reason !== "notFoundLocal") return local;
-
   if (!online) return local;
 
   const remote = await refreshProductFromApi(code);
@@ -169,8 +168,9 @@ export async function getProductLocalFirst(
 }
 
 /**
- * Scan resolution. Identical local rules to manual search; the API is only a
- * fallback for a code this device has never cached.
+ * Scan resolution. Identical local rules to manual search. When the local
+ * catalogue is valid it wins immediately; the authenticated search API is
+ * used when that catalogue is missing, expired, or does not contain the code.
  */
 export async function scanProductsLocalFirst(
   products: Product[],
@@ -181,8 +181,6 @@ export async function scanProductsLocalFirst(
 ): Promise<LocalFirstScan> {
   const local = lookupLocalScan(products, access, rawValue);
   if (local.status === "match") return local;
-  if (local.reason !== "notFoundLocal") return local;
-
   if (!online) return local;
 
   const remote = await refreshSearchFromApi(rawValue, signal);
@@ -191,6 +189,35 @@ export async function scanProductsLocalFirst(
   }
 
   const match = resolveScanMatch(rawValue, remote);
-  if (match.kind === "none") return local;
+  if (match.kind === "none") {
+    return {
+      status: "error",
+      reason: "notFoundLocal",
+      message: LOOKUP_MESSAGES.notFoundLocal,
+    };
+  }
   return { status: "match", match, source: "network" };
+}
+
+/**
+ * Manual search. A valid local catalogue is queried synchronously by the
+ * caller; this async path is for online use when that catalogue is missing
+ * or expired, and for tests of the same fallback.
+ */
+export async function searchProductsLocalFirst(
+  products: Product[],
+  access: CatalogueAccess,
+  query: string,
+  signal?: AbortSignal,
+  online = isOnline(),
+): Promise<LocalFirstSearch> {
+  const local = lookupLocalSearch(products, access, query);
+  if (local.status === "ready") return local;
+  if (!online) return local;
+
+  const remote = await refreshSearchFromApi(query, signal);
+  if (remote === null) {
+    return { status: "error", reason: "network", message: LOOKUP_MESSAGES.network };
+  }
+  return { status: "ready", products: remote, source: "network" };
 }

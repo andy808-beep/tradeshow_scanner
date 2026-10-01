@@ -144,8 +144,8 @@ describe("offline scan acceptance", () => {
     );
 
     // 1. Authenticated startup refreshes the catalogue without opening Scan.
-    expect(await screen.findByText("Online")).toBeVisible();
-    expect(await screen.findByText(/2 products/)).toBeVisible();
+    expect(await screen.findByText("在线")).toBeVisible();
+    expect(await screen.findByText(/2 款产品/)).toBeVisible();
 
     // 2. Scanner and decoder chunks were preloaded by the sync itself.
     await waitFor(async () => {
@@ -160,11 +160,11 @@ describe("offline scan acceptance", () => {
     expect(mocks.decodeFromConstraints).not.toHaveBeenCalled();
 
     // 4. Complete the camera test.
-    fireEvent.click(screen.getByRole("button", { name: "Test camera" }));
+    fireEvent.click(screen.getByRole("button", { name: "测试摄像头" }));
     expect(
-      await screen.findByText("Camera works — offline scanning is ready"),
+      await screen.findByText("摄像头可用，已可离线扫码。"),
     ).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Close camera test" }));
+    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
     expect(await screen.findByText(READINESS_MESSAGES.ready)).toBeVisible();
     await waitFor(async () => {
       const readiness = await readOfflineReadiness();
@@ -176,13 +176,13 @@ describe("offline scan acceptance", () => {
       setNetwork(false);
       window.dispatchEvent(new Event("offline"));
     });
-    expect(await screen.findByText("Offline")).toBeVisible();
+    expect(await screen.findByText("离线")).toBeVisible();
 
     const callsBeforeScan = fetchSpy.mock.calls.length;
 
     // 6. Open Scan offline; the camera starts from the cached chunks.
-    fireEvent.click(screen.getByRole("button", { name: /scan/i }));
-    expect(await screen.findByText("Camera active — point at a barcode")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "打开扫码器" }));
+    expect(await screen.findByText("扫描产品条码")).toBeVisible();
 
     // 7. Decode a known code, normalized against the local catalogue.
     await emit("k10188 13");
@@ -199,8 +199,8 @@ describe("offline scan acceptance", () => {
     expect(mocks.push).not.toHaveBeenCalled();
 
     // 10. The cached product can be added to the inquiry offline.
-    fireEvent.click(screen.getByRole("button", { name: "Add to inquiry" }));
-    expect(await screen.findByText("Added to inquiry")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "加入本次询问" }));
+    expect(await screen.findByText("已加入本次询问")).toBeVisible();
     expect(productApiCalls()).toEqual([]);
     expect(fetchSpy.mock.calls.length).toBe(callsBeforeScan);
   });
@@ -214,9 +214,9 @@ describe("offline scan acceptance", () => {
       </InquiryProvider>,
     );
 
-    expect(await screen.findByText(/2 products/)).toBeVisible();
+    expect(await screen.findByText(/2 款产品/)).toBeVisible();
     // The camera test is only offered once the scanner chunks are cached.
-    expect(await screen.findByRole("button", { name: "Test camera" })).toBeVisible();
+    expect(await screen.findByRole("button", { name: "测试摄像头" })).toBeVisible();
     expect(screen.queryByText(READINESS_MESSAGES.ready)).toBeNull();
   });
 
@@ -230,19 +230,18 @@ describe("offline scan acceptance", () => {
       </InquiryProvider>,
     );
 
-    expect(await screen.findByText(/2 products/)).toBeVisible();
+    expect(await screen.findByText(/2 款产品/)).toBeVisible();
     await act(async () => {
       setNetwork(false);
       window.dispatchEvent(new Event("offline"));
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /scan/i }));
-    await screen.findByText("Camera active — point at a barcode");
+    fireEvent.click(screen.getByRole("button", { name: "打开扫码器" }));
+    await screen.findByText("扫描产品条码");
     await emit("9999999999999");
 
-    expect(
-      await screen.findByText("No product found for barcode: 9999999999999"),
-    ).toBeVisible();
+    expect((await screen.findAllByText("未找到该产品。")).length).toBeGreaterThan(0);
+    expect(screen.getByText("9999999999999")).toBeVisible();
     expect(productApiCalls()).toEqual([]);
   });
 

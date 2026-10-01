@@ -65,31 +65,31 @@ describe("online/offline status", () => {
   it("shows Online when the browser reports a connection", async () => {
     goOnline();
     renderCatalogue(<CatalogueStatus />);
-    expect(await screen.findByText("Online")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Sync products" })).toBeEnabled();
+    expect(await screen.findByText("在线")).toBeVisible();
+    expect(screen.getByRole("button", { name: "同步产品资料" })).toBeEnabled();
   });
 
   it("shows Offline and disables sync without a network", async () => {
     goOffline();
     renderCatalogue(<CatalogueStatus />);
-    expect(await screen.findByText("Offline")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Sync products" })).toBeDisabled();
+    expect(await screen.findByText("离线")).toBeVisible();
+    expect(screen.getByRole("button", { name: "同步产品资料" })).toBeDisabled();
   });
 
   it("warns when no offline catalogue exists", async () => {
     renderCatalogue(<CatalogueStatus />);
     expect(
-      await screen.findByText(/Search and scan still work online\. Sync products to use them offline/),
+      await screen.findByText(/尚未同步产品资料。当前可在线搜索和扫码，同步后可离线使用/),
     ).toBeVisible();
-    expect(screen.getByText(/Anyone with this unlocked authorized device can read cached prices/)).toBeVisible();
+    expect(screen.getByText(/本机在授权有效期内可查看已缓存的价格/)).toBeVisible();
   });
 
   it("shows last synced time after a catalogue is stored", async () => {
     await replaceCatalogue([PRODUCT], { lastSyncedAt: Date.now(), count: 1 });
     renderCatalogue(<CatalogueStatus />);
-    expect(await screen.findByText(/Last synced/)).toBeVisible();
-    expect(screen.getByText(/1 product/)).toBeVisible();
-    expect(screen.getByText(/Offline prices expire/)).toBeVisible();
+    expect(await screen.findByText(/产品资料上次同步时间/)).toBeVisible();
+    expect(screen.getByText(/1 款产品/)).toBeVisible();
+    expect(screen.getByText(/离线价格有效至/)).toBeVisible();
   });
 });
 
@@ -107,8 +107,8 @@ describe("search uses the local catalogue", () => {
       </>,
     );
 
-    expect(await screen.findByText(/Last synced/)).toBeVisible();
-    fireEvent.change(screen.getByLabelText(/Search by product/), {
+    expect(await screen.findByText(/产品资料上次同步时间/)).toBeVisible();
+    fireEvent.change(screen.getByLabelText(/搜索产品/), {
       target: { value: "K10188-13" },
     });
     expect(await screen.findByText("K10188-13")).toBeVisible();
@@ -118,10 +118,10 @@ describe("search uses the local catalogue", () => {
   it("does not call a missing catalogue a product miss", async () => {
     goOffline();
     renderCatalogue(<SearchPanel />);
-    fireEvent.change(screen.getByLabelText(/Search by product/), {
+    fireEvent.change(screen.getByLabelText(/搜索产品/), {
       target: { value: "K10188-13" },
     });
-    expect(await screen.findByText("Catalogue not synchronized")).toBeVisible();
+    expect(await screen.findByText("尚未同步产品资料")).toBeVisible();
     expect(screen.queryByText(/product not found/i)).toBeNull();
   });
 });
@@ -135,11 +135,11 @@ describe("offline product details", () => {
     expect(screen.getByText("K10188-13")).toBeVisible();
     expect(screen.getByText("Abbesses Plate - L")).toBeVisible();
     expect(screen.getByText("20.6 × 13.3 × 2.0 cm")).toBeVisible();
-    expect(screen.getByText("Dimensions")).toBeVisible();
-    expect(screen.getByText("Unit price")).toBeVisible();
-    expect(screen.getByText("Packaging")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Add to inquiry" })).toBeVisible();
-    expect(screen.getAllByText("Pending").length).toBeGreaterThan(0);
+    expect(screen.getByText("尺寸")).toBeVisible();
+    expect(screen.getByText("单价")).toBeVisible();
+    expect(screen.getByText("包装资料")).toBeVisible();
+    expect(screen.getByRole("button", { name: "加入本次询问" })).toBeVisible();
+    expect(screen.getAllByText("待补充").length).toBeGreaterThan(0);
     expect(screen.queryByText("Barcode")).toBeNull();
   });
 
@@ -157,7 +157,7 @@ describe("offline product details", () => {
     await replaceCatalogue([PRODUCT], { lastSyncedAt: Date.now(), count: 1 });
     goOffline();
     renderCatalogue(<ProductDetailScreen code="NO-SUCH" />);
-    expect(await screen.findByText("Product not found locally")).toBeVisible();
+    expect(await screen.findByText("未找到该产品")).toBeVisible();
     expect(screen.queryByText(/not found in the database/i)).toBeNull();
   });
 
@@ -165,13 +165,13 @@ describe("offline product details", () => {
     await replaceCatalogue([PRODUCT], { lastSyncedAt: 1, count: 1 });
     goOffline();
     renderCatalogue(<ProductDetailScreen code="K10188-13" />);
-    expect(await screen.findByText("Offline access expired")).toBeVisible();
+    expect(await screen.findByText("本机产品资料已过期，请联网后重新同步。")).toBeVisible();
     expect(screen.queryByRole("heading", { name: "大方盘·紫" })).toBeNull();
   });
 });
 
 describe("logout clearing IndexedDB", () => {
-  it("erases the local catalogue, draft and outbox from the Log out button", async () => {
+  it("erases the local catalogue, draft and outbox from the 退出登录 button", async () => {
     await replaceCatalogue([PRODUCT], { lastSyncedAt: Date.now(), count: 1 });
     await writeInquiryDraft({
       customer: { name: "Ada", company: "Koei", notes: "secret" },
@@ -194,7 +194,7 @@ describe("logout clearing IndexedDB", () => {
     );
 
     renderCatalogue(<LogoutButton />);
-    fireEvent.click(screen.getByRole("button", { name: "Log out" }));
+    fireEvent.click(screen.getByRole("button", { name: "退出登录" }));
     await waitFor(async () => {
       expect(await readCatalogueMeta()).toBeNull();
       expect(await readCatalogueProducts()).toEqual([]);

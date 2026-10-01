@@ -1,5 +1,6 @@
 "use client";
 
+import { zh } from "@/lib/i18n/zh-cn";
 import { describeCode39Error, isCode39Compatible } from "@/lib/code39";
 import type { LabelLayout } from "@/lib/label-layout";
 import { productTitle, type Product } from "@/lib/types";
@@ -62,7 +63,7 @@ export default function LabelSheet({
   if (products.length === 0) {
     return (
       <p className="print:hidden px-1 text-sm text-porcelain-500">
-        Select products to preview labels.
+        {zh.labels.previewEmpty}
       </p>
     );
   }

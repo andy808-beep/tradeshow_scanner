@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { InquiryProvider } from "@/components/inquiry-store";
 import PwaRegister from "@/components/pwa-register";
+import { zh } from "@/lib/i18n/zh-cn";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -16,13 +17,12 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://tradeshow.koeico.com"),
-  title: "Koei Porcelain · Trade show",
-  description:
-    "Internal tool for looking up products and building inquiries at trade shows.",
-  applicationName: "Koei Porcelain Trade Show",
+  title: zh.app.fullName,
+  description: zh.app.description,
+  applicationName: zh.app.fullName,
   appleWebApp: {
     capable: true,
-    title: "Koei Show",
+    title: zh.app.shortName,
     statusBarStyle: "black-translucent",
   },
   icons: {
@@ -51,7 +51,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
-      lang="en"
+      lang="zh-CN"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col font-sans">

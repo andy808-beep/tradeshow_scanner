@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import type { Product } from "@/lib/types";
+import { zh } from "@/lib/i18n/zh-cn";
 import { LOOKUP_MESSAGES } from "@/lib/offline/constants";
 import { useAppPathOptional } from "./app-path";
 import { useCatalogueOptional } from "./catalogue-provider";
@@ -46,14 +47,14 @@ export default function AddToInquiry({
       onClick={onScanAnother}
       className="w-full rounded-xl bg-porcelain-600 px-4 py-3.5 text-base font-semibold text-white shadow-sm transition-colors active:bg-porcelain-700"
     >
-      Scan another product
+      {zh.product.continueScanning}
     </button>
   ) : (
     <ShellHref
       href="/"
       className="block w-full rounded-xl bg-porcelain-600 px-4 py-3.5 text-center text-base font-semibold text-white shadow-sm"
     >
-      Scan another product
+      {zh.product.continueScanning}
     </ShellHref>
   );
 
@@ -61,14 +62,14 @@ export default function AddToInquiry({
     return (
       <div className="space-y-2">
         <p className="w-full rounded-xl bg-emerald-50 px-4 py-3.5 text-center text-base font-semibold text-emerald-900">
-          {justAdded ? "Added to inquiry" : "Already in inquiry"}
+          {justAdded ? zh.product.added : zh.product.alreadyAdded}
         </p>
         {scanAnother}
         <ShellHref
           href="/inquiry"
           className="block w-full rounded-xl border border-porcelain-300 px-4 py-3 text-center text-sm font-semibold text-porcelain-700"
         >
-          View inquiry
+          {zh.product.viewInquiry}
         </ShellHref>
       </div>
     );
@@ -81,7 +82,7 @@ export default function AddToInquiry({
         onClick={handleAdd}
         className="w-full rounded-xl bg-porcelain-600 px-4 py-3.5 text-base font-semibold text-white shadow-sm transition-colors active:bg-porcelain-700"
       >
-        Add to inquiry
+        {zh.product.add}
       </button>
 
       {rejection && (

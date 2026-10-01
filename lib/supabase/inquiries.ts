@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { CreateInquiryRequest } from "@/lib/api-contract";
+import { zh } from "@/lib/i18n/zh-cn";
 import { getAdminSupabase } from "./admin";
 import { DatabaseError, InquiryValidationError } from "./errors";
 import { getActiveProductsByIds } from "./products";
@@ -18,24 +19,20 @@ export async function createInquiry(input: CreateInquiryRequest): Promise<string
 
   const missing = productIds.filter((id) => !products.has(id));
   if (missing.length > 0) {
-    throw new InquiryValidationError(
-      "One or more products are unavailable.",
-      missing.map((id) => `Product ${id} does not exist or is not active.`),
-    );
+    console.error("Inquiry products unavailable:", missing.join(","));
+    throw new InquiryValidationError(zh.validation.productsUnavailable);
   }
 
   const currencies = new Set([...products.values()].map((product) => product.currency));
   if (currencies.size > 1) {
-    throw new InquiryValidationError("An inquiry cannot mix currencies.", [
-      `Products in this inquiry use: ${[...currencies].sort().join(", ")}.`,
-    ]);
+    console.error("Inquiry mixed currencies:", [...currencies].sort().join(","));
+    throw new InquiryValidationError(zh.validation.mixedCurrency);
   }
 
   const [productCurrency] = currencies;
   if (productCurrency !== input.currency) {
-    throw new InquiryValidationError("Currency does not match the products.", [
-      `Inquiry is ${input.currency} but the products are priced in ${productCurrency}.`,
-    ]);
+    console.error("Inquiry currency mismatch:", input.currency, productCurrency);
+    throw new InquiryValidationError(zh.validation.currencyMismatch);
   }
 
   const supabase = getAdminSupabase();
@@ -61,7 +58,8 @@ export async function createInquiry(input: CreateInquiryRequest): Promise<string
   if (error) {
     // The function raises its own validation errors with SQLSTATE P0001.
     if (error.code === "P0001") {
-      throw new InquiryValidationError(error.message);
+      console.error("Inquiry validation:", error.message);
+      throw new InquiryValidationError(zh.validation.inquiryInvalid);
     }
     throw new DatabaseError(error.message);
   }

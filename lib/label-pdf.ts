@@ -316,7 +316,7 @@ function drawCalibrationMarks(
   boxes: DrawnElementBox[],
 ) {
   const pageHeightMm = template.pageHeightMm;
-  const title = "Calibration sheet — print at 100% / Actual size";
+  const title = "校准页 — 请按 100% / 实际大小打印";
   drawTextMm(page, pageHeightMm, font, title, 4, 1.2, 7, boxes);
 
   for (let mm = 0; mm <= template.pageWidthMm; mm += 1) {
@@ -427,7 +427,7 @@ export async function generateProductionLabelPdf({
     fontBytes,
     template,
     PRODUCTION_PDF_SUBJECT,
-    `Koei barcode labels — ${template.name}`,
+    `Koei 产品标签 — ${template.name}`,
   );
 
   const slots: LabelSlotReport[] = [];
@@ -497,7 +497,7 @@ export async function generateCalibrationLabelPdf({
     fontBytes,
     template,
     CALIBRATION_PDF_SUBJECT,
-    `Koei label calibration — ${template.name}`,
+    `Koei 标签校准 — ${template.name}`,
   );
   const page = addA4Page(pdf, template);
   page.drawRectangle({

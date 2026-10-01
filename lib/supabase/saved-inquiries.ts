@@ -6,6 +6,7 @@ import type {
   SavedInquiryLine,
   SavedInquiryListItem,
 } from "@/lib/api-contract";
+import { zh } from "@/lib/i18n/zh-cn";
 import { SAVED_INQUIRY_MAX_EXPORT_ROWS } from "@/lib/saved-inquiries/constants";
 import type { SavedInquiryListQuery } from "@/lib/saved-inquiries/query";
 import { getAdminSupabase } from "./admin";
@@ -195,9 +196,7 @@ export async function listSavedInquiryExportRows(
   for (const inquiry of data ?? []) {
     const next = toExportRows(inquiry);
     if (rows.length + next.length > SAVED_INQUIRY_MAX_EXPORT_ROWS) {
-      throw new InquiryValidationError(
-        "Too many matching inquiries to export. Narrow the date range or search and try again.",
-      );
+      throw new InquiryValidationError(zh.errors.exportTooLarge);
     }
     rows.push(...next);
   }

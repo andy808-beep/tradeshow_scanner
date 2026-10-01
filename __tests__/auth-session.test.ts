@@ -78,7 +78,7 @@ describe("authenticateEmployee", () => {
       error: { message: `Invalid login for ${password}` },
     });
     const result = await authenticateEmployee("andy@koeico.com", password);
-    expect(result).toEqual({ ok: false, error: "Invalid email or password." });
+    expect(result).toEqual({ ok: false, error: "邮箱或密码不正确。" });
     expect(JSON.stringify(result)).not.toContain(password);
   });
 });
@@ -114,7 +114,7 @@ describe("signInAction", () => {
     form.set("password", "nope");
 
     await expect(signInAction(null, form)).resolves.toEqual({
-      error: "Invalid email or password.",
+      error: "邮箱或密码不正确。",
     });
   });
 });

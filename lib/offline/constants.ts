@@ -1,3 +1,5 @@
+import { zh } from "@/lib/i18n/zh-cn";
+
 export const CATALOGUE_DB_NAME = "koei-tradeshow";
 export const CATALOGUE_DB_VERSION = 3;
 export const PRODUCTS_STORE = "products";
@@ -12,7 +14,7 @@ export const DRAFT_RECORD_KEY = "current";
 export const INQUIRY_SUBMIT_TIMEOUT_MS = 15_000;
 
 /** Service-worker cache for the app shell only — never API responses. */
-export const SHELL_CACHE_NAME = "koei-shell-v1";
+export const SHELL_CACHE_NAME = "koei-shell-v2";
 export const SHELL_CACHE_PREFIX = "koei-shell-";
 
 export const OFFLINE_AUTH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -25,17 +27,14 @@ export const MAX_LOCAL_SEARCH_RESULTS = 30;
 export const NETWORK_REFRESH_TIMEOUT_MS = 4_000;
 
 export const LOOKUP_MESSAGES = {
-  unsynced: "Sync products while online.",
-  expired:
-    "Offline access has expired. Sign in while online and sync products again to see prices.",
-  network: "The network is unavailable. Cached products are still shown when a catalogue exists.",
-  syncFailed: "Synchronization failed. The previous catalogue on this device was kept.",
-  syncFailedRetry:
-    "Synchronization failed. Search and scan still work online. Tap Sync products to retry.",
-  notFoundLocal: "No match in synchronized catalogue.",
-  localUnavailable:
-    "The offline catalogue on this device could not be read. Sync products while online.",
-  empty: "The synchronized catalogue is empty.",
+  unsynced: zh.search.missingOffline,
+  expired: zh.sync.catalogueExpired,
+  network: zh.errors.network,
+  syncFailed: zh.sync.syncFailedWithCache,
+  syncFailedRetry: zh.sync.syncFailedNoCache,
+  notFoundLocal: zh.product.notFound,
+  localUnavailable: zh.errors.productDataUnavailable,
+  empty: zh.errors.productDataUnavailable,
 } as const;
 
 /**
@@ -44,8 +43,7 @@ export const LOOKUP_MESSAGES = {
  * A synced catalogue alone is never announced as offline ready.
  */
 export const READINESS_MESSAGES = {
-  scannerAssets:
-    "Scanner files are still downloading. Stay online and tap Sync products again if this does not clear.",
-  cameraTest: "Products synced — test camera to finish offline setup",
-  ready: "Offline ready",
+  scannerAssets: zh.sync.scannerAssets,
+  cameraTest: zh.sync.cameraTest,
+  ready: zh.sync.offlineReady,
 } as const;

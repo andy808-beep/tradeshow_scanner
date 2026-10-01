@@ -40,14 +40,14 @@ describe("quoted price is required", () => {
     const result = validateCreateInquiry(body({ items: item({ quotedPrice: null }) }));
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.errors.join(" ")).toMatch(/needs a quoted price/);
+    expect(result.errors.join(" ")).toMatch(/请为每款产品填写报价单价/);
   });
 
   it("rejects a missing price field", () => {
     const result = validateCreateInquiry(body({ items: [{ productId: PRODUCT_ID }] }));
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.errors.join(" ")).toMatch(/needs a quoted price/);
+    expect(result.errors.join(" ")).toMatch(/请为每款产品填写报价单价/);
   });
 
   it("rejects a blank price", () => {
@@ -59,7 +59,7 @@ describe("quoted price is required", () => {
     const result = validateCreateInquiry(body({ items: item({ quotedPrice: -1 }) }));
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.errors.join(" ")).toMatch(/negative/);
+    expect(result.errors.join(" ")).toMatch(/不能为负数/);
   });
 
   it("rejects malformed prices", () => {
@@ -83,7 +83,7 @@ describe("quoted price is required", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.errors.join(" ")).toMatch(/Item 2/);
+    expect(result.errors.join(" ")).toMatch(/第 2 款/);
   });
 });
 

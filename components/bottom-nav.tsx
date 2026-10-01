@@ -1,5 +1,6 @@
 "use client";
 
+import { zh } from "@/lib/i18n/zh-cn";
 import { useAppPath } from "./app-path";
 import { useInquiry } from "./inquiry-store";
 
@@ -39,7 +40,7 @@ export default function BottomNav() {
           aria-current={onSearch ? "page" : undefined}
         >
           <span aria-hidden>🔍</span>
-          Search
+          {zh.nav.search}
         </a>
         <a
           href="/inquiry"
@@ -48,7 +49,7 @@ export default function BottomNav() {
           aria-current={onInquiry ? "page" : undefined}
         >
           <span aria-hidden>📋</span>
-          Inquiry
+          {zh.nav.currentInquiry}
           {lines.length > 0 && (
             <span className="absolute top-1 right-1/2 -mr-5 inline-flex min-w-5 justify-center rounded-full bg-porcelain-600 px-1.5 py-0.5 text-[10px] leading-none font-semibold text-white">
               {lines.length}
@@ -63,7 +64,7 @@ export default function BottomNav() {
           aria-current={onSaved ? "page" : undefined}
         >
           <span aria-hidden>📁</span>
-          Saved
+          {zh.nav.saved}
         </a>
         <a
           href="/labels"
@@ -72,7 +73,7 @@ export default function BottomNav() {
           aria-current={onLabels ? "page" : undefined}
         >
           <span aria-hidden>🏷</span>
-          Labels
+          {zh.nav.labels}
         </a>
       </div>
     </nav>

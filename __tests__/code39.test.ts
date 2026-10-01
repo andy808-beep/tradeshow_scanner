@@ -74,7 +74,7 @@ describe("ZXing round-trip", () => {
 describe("invalid codes", () => {
   it("throws a descriptive error instead of encoding", () => {
     expect(() => encodeCode39("k10188-13")).toThrow(/Code 39/);
-    expect(describeCode39Error("k10188-13")).toMatch(/Unsupported/);
-    expect(describeCode39Error("")).toMatch(/empty/);
+    expect(describeCode39Error("k10188-13")).toMatch(/无法将/);
+    expect(describeCode39Error("")).toMatch(/为空/);
   });
 });

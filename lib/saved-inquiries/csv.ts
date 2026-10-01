@@ -1,18 +1,19 @@
 import type { SavedInquiryExportRow } from "@/lib/api-contract";
+import { zh } from "@/lib/i18n/zh-cn";
 
 const BOM = "\uFEFF";
 
 const HEADERS = [
-  "Inquiry ID",
-  "Saved At",
-  "Customer Name",
-  "Company Name",
-  "General Notes",
-  "Currency",
-  "Product Code",
-  "Product Name",
-  "Quoted Unit Price",
-  "Product Notes",
+  zh.csv.inquiryReference,
+  zh.csv.savedAt,
+  zh.csv.customerName,
+  zh.csv.companyName,
+  zh.csv.generalNotes,
+  zh.csv.currency,
+  zh.csv.productCode,
+  zh.csv.productName,
+  zh.csv.quotedUnitPrice,
+  zh.csv.productNotes,
 ] as const;
 
 export function csvField(value: string | number | null | undefined): string {
@@ -25,7 +26,7 @@ export function savedInquiryExportFilename(now = new Date()): string {
   const year = String(now.getUTCFullYear());
   const month = String(now.getUTCMonth() + 1).padStart(2, "0");
   const day = String(now.getUTCDate()).padStart(2, "0");
-  return `saved-inquiries-${year}-${month}-${day}.csv`;
+  return zh.csv.filename(`${year}-${month}-${day}`);
 }
 
 export function buildSavedInquiryCsv(rows: SavedInquiryExportRow[]): string {

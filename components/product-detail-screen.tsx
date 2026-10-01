@@ -4,14 +4,15 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useCatalogue } from "@/components/catalogue-provider";
 import ProductDetailView from "@/components/product-detail-view";
+import { zh } from "@/lib/i18n/zh-cn";
 import { getProductLocalFirst } from "@/lib/offline/lookup";
 import type { Product } from "@/lib/types";
 
 const ERROR_TITLES = {
-  unsynced: "Catalogue not synchronized",
-  expired: "Offline access expired",
-  network: "Network unavailable",
-  notFoundLocal: "Product not found locally",
+  unsynced: zh.sync.titles.unsynced,
+  expired: zh.sync.titles.expired,
+  network: zh.sync.titles.network,
+  notFoundLocal: zh.sync.titles.notFound,
 } as const;
 
 type DetailView = {
@@ -50,9 +51,9 @@ export default function ProductDetailScreen({ code }: { code: string }) {
     return (
       <div className="space-y-5">
         <Link href="/" className="inline-block text-sm font-medium text-porcelain-600">
-          ← Back to search
+          ← {zh.actions.backToSearch}
         </Link>
-        <p className="text-sm text-porcelain-500">Loading product…</p>
+        <p className="text-sm text-porcelain-500">{zh.product.loading}</p>
       </div>
     );
   }
@@ -64,7 +65,7 @@ export default function ProductDetailScreen({ code }: { code: string }) {
   return (
     <div className="space-y-5">
       <Link href="/" className="inline-block text-sm font-medium text-porcelain-600">
-        ← Back to search
+        ← {zh.actions.backToSearch}
       </Link>
       {resolved.error && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-4 text-sm text-amber-900">

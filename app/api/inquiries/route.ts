@@ -6,6 +6,7 @@ import {
 } from "@/lib/api-contract";
 import { withAuthenticatedApi } from "@/lib/auth/api";
 import { errorResponse } from "@/lib/api-response";
+import { zh } from "@/lib/i18n/zh-cn";
 import { parseSavedInquiryListQuery } from "@/lib/saved-inquiries/query";
 import { createInquiry } from "@/lib/supabase/inquiries";
 import { listSavedInquiries } from "@/lib/supabase/saved-inquiries";
@@ -18,7 +19,7 @@ const NO_STORE = { "Cache-Control": "private, no-store" };
 export const GET = withAuthenticatedApi(async (request: Request) => {
   const parsed = parseSavedInquiryListQuery(new URL(request.url).searchParams);
   if (!parsed.ok) {
-    return errorResponse("The inquiry list could not be loaded.", 400, parsed.errors);
+    return errorResponse(zh.history.loadFailed, 400, parsed.errors);
   }
 
   const { inquiries, total } = await listSavedInquiries(parsed.value);
@@ -39,12 +40,12 @@ export const POST = withAuthenticatedApi(async (request: Request) => {
   try {
     body = await request.json();
   } catch {
-    return errorResponse("Request body must be valid JSON.", 400);
+    return errorResponse(zh.validation.requestJson, 400);
   }
 
   const validation = validateCreateInquiry(body);
   if (!validation.ok) {
-    return errorResponse("The inquiry could not be saved.", 400, validation.errors);
+    return errorResponse(zh.validation.saveFailed, 400, validation.errors);
   }
 
   const inquiryId = await createInquiry(validation.value);

@@ -5,7 +5,7 @@ import { ApiError, exportSavedInquiriesRequest, listSavedInquiriesRequest } from
 import type { SavedInquiryListItem } from "@/lib/api-contract";
 import { formatSyncTime } from "@/lib/offline/authorization";
 import { isOnline } from "@/lib/offline/lookup";
-import { recordedProductsLabel } from "@/lib/inquiry";
+import { zh, productStylesText } from "@/lib/i18n/zh-cn";
 import { SAVED_INQUIRY_PAGE_SIZE } from "@/lib/saved-inquiries/constants";
 import { savedInquiryListSearchParams } from "@/lib/saved-inquiries/query";
 import { ShellAnchor } from "./app-path";
@@ -72,7 +72,7 @@ export default function SavedInquiriesScreen() {
       } catch (caught: unknown) {
         if (cancelled) return;
         if (caught instanceof DOMException && caught.name === "AbortError") return;
-        setError(caught instanceof Error ? caught.message : "Saved inquiries could not be loaded.");
+        setError(caught instanceof ApiError ? caught.message : zh.history.loadFailed);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -110,13 +110,7 @@ export default function SavedInquiriesScreen() {
       anchor.click();
       URL.revokeObjectURL(url);
     } catch (caught: unknown) {
-      setExportError(
-        caught instanceof ApiError
-          ? caught.message
-          : caught instanceof Error
-            ? caught.message
-            : "The export could not be created.",
-      );
+      setExportError(caught instanceof ApiError ? caught.message : zh.errors.exportFailed);
     } finally {
       setExporting(false);
     }
@@ -125,16 +119,12 @@ export default function SavedInquiriesScreen() {
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-xs font-medium tracking-wide text-porcelain-500 uppercase">History</p>
-        <h1 className="text-xl font-semibold text-porcelain-950">Saved inquiries</h1>
-        <p className="mt-1 text-sm text-porcelain-600">
-          Read-only record of synchronized trade-show inquiries.
-        </p>
+        <h1 className="text-xl font-semibold text-porcelain-950">{zh.inquiry.historyHeading}</h1>
+        <p className="mt-1 text-sm text-porcelain-600">{zh.inquiry.historyDescription}</p>
       </div>
 
       <OnlineOnlyNotice>
-        Saved inquiry history requires internet access. The current draft and queued
-        inquiries on this device still work offline.
+        {zh.history.onlineRequired}
       </OnlineOnlyNotice>
 
       <form
@@ -145,7 +135,7 @@ export default function SavedInquiriesScreen() {
         }}
       >
         <label className="block text-xs font-medium text-porcelain-600" htmlFor="saved-search">
-          Search customer or company
+          {zh.history.searchLabel}
         </label>
         <input
           id="saved-search"
@@ -153,12 +143,13 @@ export default function SavedInquiriesScreen() {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           className={fieldClasses}
+          placeholder={zh.history.searchPlaceholder}
           autoComplete="off"
         />
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="block text-xs font-medium text-porcelain-600" htmlFor="saved-from">
-              From
+              {zh.history.startDate}
             </label>
             <input
               id="saved-from"
@@ -170,7 +161,7 @@ export default function SavedInquiriesScreen() {
           </div>
           <div>
             <label className="block text-xs font-medium text-porcelain-600" htmlFor="saved-to">
-              To
+              {zh.history.endDate}
             </label>
             <input
               id="saved-to"
@@ -186,7 +177,20 @@ export default function SavedInquiriesScreen() {
             type="submit"
             className="rounded-xl bg-porcelain-700 px-4 py-2.5 text-sm font-semibold text-white"
           >
-            Apply filters
+            {zh.history.apply}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setQuery("");
+              setFrom("");
+              setTo("");
+              setPage(1);
+              setApplied({ q: "", from: null, to: null });
+            }}
+            className="rounded-xl border border-porcelain-300 px-4 py-2.5 text-sm font-semibold text-porcelain-800"
+          >
+            {zh.history.clear}
           </button>
           <button
             type="button"
@@ -196,7 +200,7 @@ export default function SavedInquiriesScreen() {
             disabled={!online || exporting || loading}
             className="rounded-xl border border-porcelain-300 px-4 py-2.5 text-sm font-semibold text-porcelain-800 disabled:text-porcelain-400"
           >
-            {exporting ? "Exporting…" : "Export CSV"}
+            {exporting ? zh.history.exporting : zh.history.exportCsv}
           </button>
         </div>
       </form>
@@ -208,15 +212,15 @@ export default function SavedInquiriesScreen() {
       )}
 
       {!online ? null : loading ? (
-        <p className="text-sm text-porcelain-500">Loading saved inquiries…</p>
+        <p className="text-sm text-porcelain-500">{zh.history.loading}</p>
       ) : error ? (
         <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
-          <p className="font-semibold">Could not load saved inquiries</p>
-          <p className="mt-1">{error}</p>
+          <p className="font-semibold">{zh.history.loadFailed}</p>
+          {error !== zh.history.loadFailed ? <p className="mt-1">{error}</p> : null}
         </div>
       ) : inquiries.length === 0 ? (
         <p className="rounded-xl border border-dashed border-porcelain-300 bg-porcelain-50 px-4 py-6 text-center text-sm text-porcelain-600">
-          No saved inquiries match these filters.
+          {zh.history.empty}
         </p>
       ) : (
         <ul className="space-y-2">
@@ -224,22 +228,31 @@ export default function SavedInquiriesScreen() {
             <li key={inquiry.id}>
               <article className="rounded-xl border border-porcelain-200 bg-white p-4 shadow-sm">
                 <p className="text-xs text-porcelain-500">
-                  {formatSyncTime(Date.parse(inquiry.savedAt))}
+                  {zh.inquiry.savedAt} {formatSyncTime(Date.parse(inquiry.savedAt))}
                 </p>
-                <p className="mt-1 font-semibold text-porcelain-950">{inquiry.customerName}</p>
+                <p className="mt-1 font-semibold text-porcelain-950">
+                  <span className="sr-only">{zh.inquiry.customerName} </span>
+                  {inquiry.customerName}
+                </p>
                 {inquiry.companyName && (
-                  <p className="text-sm text-porcelain-700">{inquiry.companyName}</p>
+                  <p className="text-sm text-porcelain-700">
+                    <span className="sr-only">{zh.inquiry.companyName} </span>
+                    {inquiry.companyName}
+                  </p>
                 )}
                 <p className="mt-2 text-sm text-porcelain-600">
-                  {recordedProductsLabel(inquiry.productCount)} · {inquiry.currency}
-                  {inquiry.hasNotes ? " · Notes" : ""}
+                  {productStylesText(inquiry.productCount)} · {zh.product.currency} {inquiry.currency}
+                  {inquiry.hasNotes ? ` · ${zh.inquiry.hasNotes}` : ""}
                 </p>
-                <p className="mt-1 font-mono text-xs break-all text-porcelain-500">{inquiry.id}</p>
+                <p className="mt-1 font-mono text-xs break-all text-porcelain-500">
+                  <span className="sr-only">{zh.inquiry.reference} </span>
+                  {inquiry.id}
+                </p>
                 <ShellAnchor
                   href={`/inquiries/${inquiry.id}`}
                   className="mt-3 block w-full rounded-xl bg-porcelain-700 px-4 py-2.5 text-center text-sm font-semibold text-white"
                 >
-                  View
+                  {zh.history.view}
                 </ShellAnchor>
               </article>
             </li>
@@ -255,18 +268,16 @@ export default function SavedInquiriesScreen() {
             disabled={page <= 1}
             className="rounded-lg border border-porcelain-300 px-3 py-1.5 font-semibold text-porcelain-800 disabled:text-porcelain-400"
           >
-            Previous
+            {zh.history.previous}
           </button>
-          <p className="text-porcelain-600">
-            Page {page} of {pageCount}
-          </p>
+          <p className="text-porcelain-600">{zh.history.page(page, pageCount)}</p>
           <button
             type="button"
             onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
             disabled={page >= pageCount}
             className="rounded-lg border border-porcelain-300 px-3 py-1.5 font-semibold text-porcelain-800 disabled:text-porcelain-400"
           >
-            Next
+            {zh.history.next}
           </button>
         </div>
       )}

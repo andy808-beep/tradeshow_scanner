@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { zh } from "@/lib/i18n/zh-cn";
 import { canSubmitInquiry, isLinePriced, recordedProductsLabel } from "@/lib/inquiry";
 import { useAppPathOptional } from "./app-path";
 import CustomerForm from "./customer-form";
@@ -38,10 +39,8 @@ export default function InquiryScreen() {
     if (unpricedLines.length > 0) {
       setSave({
         status: "error",
-        message: "Every product needs a quoted price before saving.",
-        details: unpricedLines.map(
-          (line) => `${line.product.code} has no quoted price.`,
-        ),
+        message: zh.validation.quotedPrice,
+        details: unpricedLines.map((line) => zh.inquiry.lineQuoteMissing(line.product.code)),
       });
       return;
     }
@@ -77,31 +76,30 @@ export default function InquiryScreen() {
     return (
       <div className="space-y-4">
         <section className="rounded-xl border border-emerald-300 bg-emerald-50 p-4">
-          <p className="text-lg font-semibold text-emerald-950">
-            {queued
-              ? "Inquiry saved on this device — awaiting synchronization."
-              : "Inquiry saved"}
+          <p className="text-lg font-semibold text-emerald-950">{zh.inquiry.savedHeading}</p>
+          <p className="mt-1 text-sm text-emerald-900">
+            {queued ? zh.inquiry.savedOffline : zh.inquiry.savedOnline}
           </p>
           <dl className="mt-3 space-y-2 text-sm">
             <div>
-              <dt className="text-xs text-emerald-800">Customer</dt>
+              <dt className="text-xs text-emerald-800">{zh.inquiry.customerName}</dt>
               <dd className="font-medium text-emerald-950">{confirmation.customerName}</dd>
             </div>
             {confirmation.companyName !== "" && (
               <div>
-                <dt className="text-xs text-emerald-800">Company</dt>
+                <dt className="text-xs text-emerald-800">{zh.inquiry.companyName}</dt>
                 <dd className="font-medium text-emerald-950">{confirmation.companyName}</dd>
               </div>
             )}
             <div>
-              <dt className="text-xs text-emerald-800">Products</dt>
+              <dt className="text-xs text-emerald-800">{zh.inquiry.productCount}</dt>
               <dd className="font-medium text-emerald-950">
                 {recordedProductsLabel(confirmation.productCount)}
               </dd>
             </div>
             {confirmation.inquiryId && (
               <div>
-                <dt className="text-xs text-emerald-800">Inquiry ID</dt>
+                <dt className="text-xs text-emerald-800">{zh.inquiry.reference}</dt>
                 <dd className="font-mono text-sm break-all text-emerald-950">
                   {confirmation.inquiryId}
                 </dd>
@@ -113,7 +111,7 @@ export default function InquiryScreen() {
               href={`/inquiries/${confirmation.inquiryId}`}
               className="mt-4 block w-full rounded-xl border border-emerald-400 px-4 py-3 text-center text-sm font-semibold text-emerald-900"
             >
-              View saved inquiry
+              {zh.inquiry.viewSaved}
             </ShellHref>
           )}
           <button
@@ -121,7 +119,7 @@ export default function InquiryScreen() {
             onClick={startNextInquiry}
             className="mt-4 w-full rounded-xl bg-emerald-700 px-4 py-3 text-sm font-semibold text-white"
           >
-            Start next inquiry
+            {zh.inquiry.startNext}
           </button>
         </section>
       </div>
@@ -131,12 +129,10 @@ export default function InquiryScreen() {
   if (lines.length === 0) {
     return (
       <div className="space-y-4 py-10 text-center">
-        <h1 className="text-lg font-semibold text-porcelain-950">No products yet</h1>
-        <p className="text-sm text-porcelain-600">
-          Search for a product and add it to start an inquiry.
-        </p>
+        <h1 className="text-lg font-semibold text-porcelain-950">{zh.inquiry.emptyHeading}</h1>
+        <p className="text-sm text-porcelain-600">{zh.inquiry.emptyExplanation}</p>
         <ShellHref href="/" className="inline-block rounded-xl bg-porcelain-600 px-4 py-3 text-sm font-semibold text-white">
-          Scan another product
+          {zh.inquiry.returnToSearch}
         </ShellHref>
       </div>
     );
@@ -144,8 +140,7 @@ export default function InquiryScreen() {
 
   return (
     <div className="space-y-4">
-      <p className="text-xs font-medium tracking-wide text-porcelain-500 uppercase">Draft</p>
-      <h1 className="text-xl font-semibold text-porcelain-950">Inquiry</h1>
+      <h1 className="text-xl font-semibold text-porcelain-950">{zh.inquiry.currentHeading}</h1>
 
       <ul className="space-y-3">
         {lines.map((line) => (
@@ -168,7 +163,7 @@ export default function InquiryScreen() {
               ))}
             </ul>
           )}
-          <p className="mt-1 text-red-800">Nothing was lost — try saving again.</p>
+          <p className="mt-1 text-red-800">{zh.inquiry.keptOnDevice}</p>
         </div>
       )}
 
@@ -176,7 +171,7 @@ export default function InquiryScreen() {
         href="/"
         className="block w-full rounded-xl border border-porcelain-300 px-4 py-3 text-center text-sm font-semibold text-porcelain-700"
       >
-        Scan another product
+        {zh.product.continueScanning}
       </ShellHref>
 
       <button
@@ -187,20 +182,20 @@ export default function InquiryScreen() {
         disabled={!canSave}
         className="w-full rounded-xl bg-porcelain-600 px-4 py-3.5 text-base font-semibold text-white shadow-sm disabled:bg-porcelain-300"
       >
-        {saving ? "Saving…" : "Save inquiry"}
+        {saving ? zh.inquiry.saving : zh.inquiry.save}
       </button>
 
       {customer.name.trim() === "" && (
         <p className="text-center text-xs text-porcelain-500">
-          Enter a customer name to save this inquiry.
+          {zh.validation.customerName}
         </p>
       )}
 
       {unpricedLines.length > 0 && (
         <p className="text-center text-xs font-medium text-red-700">
           {unpricedLines.length === 1
-            ? `${unpricedLines[0].product.code} needs a quoted price before saving.`
-            : `${unpricedLines.length} products need a quoted price before saving.`}
+            ? zh.inquiry.lineQuoteMissing(unpricedLines[0].product.code)
+            : zh.validation.quotedPrice}
         </p>
       )}
     </div>

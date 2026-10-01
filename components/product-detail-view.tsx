@@ -4,6 +4,7 @@ import Link from "next/link";
 import AddToInquiry from "@/components/add-to-inquiry";
 import { DetailRow } from "@/components/pending";
 import { formatMoney } from "@/lib/format";
+import { zh } from "@/lib/i18n/zh-cn";
 import { productTitle, type Product } from "@/lib/types";
 
 /**
@@ -29,11 +30,11 @@ export default function ProductDetailView({
           onClick={onBack}
           className="inline-block text-sm font-medium text-porcelain-600"
         >
-          ← Back to search
+          ← {zh.actions.backToSearch}
         </button>
       ) : (
         <Link href="/" className="inline-block text-sm font-medium text-porcelain-600">
-          ← Back to search
+          ← {zh.actions.backToSearch}
         </Link>
       )}
 
@@ -50,16 +51,16 @@ export default function ProductDetailView({
       </div>
 
       <dl className="rounded-xl border border-porcelain-200 bg-white px-4 py-1 shadow-sm">
-        <DetailRow label="Dimensions" value={product.dimensions} />
+        <DetailRow label={zh.product.dimensions} value={product.dimensions} />
         <DetailRow
-          label="Unit price"
+          label={zh.product.unitPrice}
           value={
             product.unitPrice === null
               ? null
               : formatMoney(product.unitPrice, product.currency)
           }
         />
-        <DetailRow label="Packaging" value={product.packaging} />
+        <DetailRow label={zh.product.packaging} value={product.packaging} />
       </dl>
 
       <AddToInquiry product={product} onScanAnother={onBack} />

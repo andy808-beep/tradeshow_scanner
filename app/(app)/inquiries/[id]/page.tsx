@@ -5,8 +5,8 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata(
   props: PageProps<"/inquiries/[id]">,
 ): Promise<Metadata> {
-  const { id } = await props.params;
-  return { title: `Inquiry ${id.slice(0, 8)} · Koei Porcelain` };
+  await props.params;
+  return { title: "询问单详情 | Koei 展会询问" };
 }
 
 /** Rendered by AppScreens from the current path. */

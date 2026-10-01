@@ -1,15 +1,16 @@
 import "server-only";
 
 import { createAuthServerClient } from "@/lib/supabase/server";
+import { zh } from "@/lib/i18n/zh-cn";
 import { SupabaseConfigError } from "@/lib/supabase/errors";
 
 export type EmployeeSignInResult =
   | { ok: true }
   | { ok: false; error: string };
 
-const INVALID_CREDENTIALS = "Invalid email or password.";
-const REQUIRED_FIELDS = "Enter your email and password.";
-const UNAVAILABLE = "Sign-in is not available right now.";
+const INVALID_CREDENTIALS = zh.auth.invalidCredentials;
+const REQUIRED_FIELDS = zh.auth.requiredFields;
+const UNAVAILABLE = zh.errors.network;
 
 /**
  * Email/password sign-in for booth staff. The password is never returned,

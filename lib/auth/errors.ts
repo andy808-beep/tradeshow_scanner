@@ -1,12 +1,14 @@
+import { zh } from "@/lib/i18n/zh-cn";
+
 export class AuthenticationError extends Error {
   constructor() {
-    super("Authentication required.");
+    super(zh.auth.loginRequired);
     this.name = "AuthenticationError";
   }
 }
 
 export class AuthorizationError extends Error {
-  constructor(message = "You are not allowed to access this resource.") {
+  constructor(message = zh.auth.notAuthorized) {
     super(message);
     this.name = "AuthorizationError";
   }

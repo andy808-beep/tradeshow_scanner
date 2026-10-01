@@ -189,7 +189,7 @@ describe("authenticated saved-inquiry APIs", () => {
       routeContext(MISSING_ID),
     );
     expect(missing.status).toBe(404);
-    await expect(missing.json()).resolves.toEqual({ error: "Inquiry not found." });
+    await expect(missing.json()).resolves.toEqual({ error: "未找到该询问单。" });
 
     const invalid = await getInquiry(
       request("http://localhost/api/inquiries/not-a-uuid"),
@@ -220,7 +220,10 @@ describe("authenticated saved-inquiry APIs", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect(response.headers.get("content-type")).toMatch(/text\/csv/);
-    expect(response.headers.get("content-disposition")).toMatch(/saved-inquiries-\d{4}-\d{2}-\d{2}\.csv/);
+    expect(response.headers.get("content-disposition")).toMatch(/filename\*=UTF-8''/);
+    expect(decodeURIComponent(response.headers.get("content-disposition") ?? "")).toMatch(
+      /询问记录-\d{4}-\d{2}-\d{2}\.csv/,
+    );
     const bytes = new Uint8Array(await response.arrayBuffer());
     expect(bytes[0]).toBe(0xef);
     expect(bytes[1]).toBe(0xbb);

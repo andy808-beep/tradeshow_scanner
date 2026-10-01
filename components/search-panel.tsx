@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { useCatalogue } from "@/components/catalogue-provider";
 import ProductDetailView from "@/components/product-detail-view";
+import { zh } from "@/lib/i18n/zh-cn";
 import { LOOKUP_MESSAGES } from "@/lib/offline/constants";
 import { lookupLocalSearch, refreshSearchFromApi } from "@/lib/offline/lookup";
 import type { Product } from "@/lib/types";
@@ -15,10 +16,10 @@ const BarcodeScanner = dynamic(() => import("./barcode-scanner"), { ssr: false }
 const DEBOUNCE_MS = 250;
 
 const ERROR_TITLES: Record<string, string> = {
-  unsynced: "Catalogue not synchronized",
-  expired: "Offline access expired",
-  network: "Network unavailable",
-  notFoundLocal: "Product not found locally",
+  unsynced: zh.sync.titles.unsynced,
+  expired: zh.sync.titles.expired,
+  network: zh.sync.titles.network,
+  notFoundLocal: zh.sync.titles.notFound,
 };
 
 export default function SearchPanel() {
@@ -140,17 +141,18 @@ export default function SearchPanel() {
 
   return (
     <div className="space-y-4">
+      <h1 className="text-xl font-semibold text-porcelain-950">{zh.search.heading}</h1>
       <div className="flex items-stretch gap-2">
         <div className="flex-1">
           <label htmlFor="product-search" className="sr-only">
-            Search by product code or name
+            {zh.search.label}
           </label>
           <input
             id="product-search"
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Product code or name"
+            placeholder={zh.search.placeholder}
             autoComplete="off"
             enterKeyHint="search"
             className="w-full rounded-xl border border-porcelain-300 bg-white px-3.5 py-3 text-base text-porcelain-950 placeholder:text-porcelain-400 focus:border-porcelain-500 focus:ring-2 focus:ring-porcelain-200 focus:outline-none"
@@ -171,21 +173,20 @@ export default function SearchPanel() {
       <div aria-live="polite">
         {localError && (
           <div className="mb-2 rounded-xl border border-red-300 bg-red-50 px-4 py-4 text-sm text-red-900">
-            <p className="font-semibold">Offline catalogue unavailable</p>
+            <p className="font-semibold">{zh.sync.catalogueUnavailable}</p>
             <p className="mt-1">{localError}</p>
           </div>
         )}
 
         {phase === "idle" && (
           <p className="px-1 text-sm text-porcelain-500">
-            Search by product code (for example K10188-13), barcode, or Chinese or
-            English name.
+            {zh.search.hint}
           </p>
         )}
 
         {phase === "searching" && (
           <p className="rounded-xl border border-dashed border-porcelain-300 bg-porcelain-50 px-4 py-6 text-center text-sm text-porcelain-600">
-            Searching…
+            {zh.search.searching}
           </p>
         )}
 
@@ -199,7 +200,7 @@ export default function SearchPanel() {
             ) : local?.status === "error" ? (
               <>
                 <p className="font-semibold">
-                  {ERROR_TITLES[local.reason] ?? "Unavailable"}
+                  {ERROR_TITLES[local.reason] ?? zh.sync.titles.unavailable}
                 </p>
                 <p className="mt-1">{local.message}</p>
               </>
@@ -209,15 +210,15 @@ export default function SearchPanel() {
 
         {phase === "empty" && (
           <p className="rounded-xl border border-dashed border-porcelain-300 bg-porcelain-50 px-4 py-6 text-center text-sm text-porcelain-600">
-            {LOOKUP_MESSAGES.notFoundLocal}
+            {zh.search.noResults}
           </p>
         )}
 
         {phase === "results" && (
           <>
             <p className="mb-2 px-1 text-xs tracking-wide text-porcelain-500 uppercase">
-              {products.length} {products.length === 1 ? "result" : "results"}
-              {refreshingQuery === trimmed ? " · refreshing" : ""}
+              {zh.search.results(products.length)}
+              {refreshingQuery === trimmed ? ` · ${zh.search.refreshing}` : ""}
             </p>
             <ul className="space-y-2">
               {products.map((product) => (

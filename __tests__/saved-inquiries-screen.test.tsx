@@ -151,22 +151,22 @@ describe("saved inquiry list", () => {
     renderShell(<SavedInquiriesScreen />);
     expect(await screen.findByText("Ada Lovelace")).toBeVisible();
     expect(screen.getByText("Koei Porcelain")).toBeVisible();
-    fireEvent.change(screen.getByLabelText(/Search customer or company/), {
+    fireEvent.change(screen.getByLabelText(/搜索/), {
       target: { value: "Ada" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Apply filters" }));
+    fireEvent.click(screen.getByRole("button", { name: "筛选" }));
     await waitFor(() => {
       expect(mocks.listSavedInquiriesRequest.mock.calls.some(([params]) => String(params).includes("q=Ada"))).toBe(
         true,
       );
     });
-    expect(screen.getByRole("link", { name: "View" })).toBeVisible();
-    expect(screen.getByText(/2 products recorded/)).toBeVisible();
+    expect(screen.getByRole("link", { name: "查看详情" })).toBeVisible();
+    expect(screen.getByText(/2 款产品/)).toBeVisible();
     expect(screen.getByText(/USD/)).toBeVisible();
     expect(screen.getByText(INQUIRY_ID)).toBeVisible();
-    expect(screen.getByText(/Notes/)).toBeVisible();
-    expect(screen.getByRole("link", { name: "View" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Export CSV" })).toBeVisible();
+    expect(screen.getByText(/有备注/)).toBeVisible();
+    expect(screen.getByRole("link", { name: "查看详情" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "导出 CSV" })).toBeVisible();
     expect(screen.queryByRole("button", { name: /edit/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /delete/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /reopen/i })).toBeNull();
@@ -183,14 +183,14 @@ describe("saved inquiry list", () => {
       pageSize: 20,
     });
     renderShell(<SavedInquiriesScreen />);
-    expect(await screen.findByText(/No saved inquiries match these filters/)).toBeVisible();
+    expect(await screen.findByText(/没有找到符合条件的询问记录/)).toBeVisible();
   });
 
   it("shows an error state when the list cannot load", async () => {
     mocks.listSavedInquiriesRequest.mockRejectedValue(new Error("The product database is not available."));
     renderShell(<SavedInquiriesScreen />);
-    expect(await screen.findByText("Could not load saved inquiries")).toBeVisible();
-    expect(screen.getByText("The product database is not available.")).toBeVisible();
+    expect(await screen.findByText("无法载入询问记录，请重试。")).toBeVisible();
+    expect(screen.queryByText("The product database is not available.")).toBeNull();
   });
 });
 
@@ -227,15 +227,15 @@ describe("offline saved history", () => {
       </>,
     );
 
-    expect(await screen.findByText("Network required")).toBeVisible();
+    expect(await screen.findByText("需要连接网络")).toBeVisible();
     expect(
-      screen.getByText(/Saved inquiry history requires internet access/),
+      screen.getByText(/需要连接网络才能查看询问记录/),
     ).toBeVisible();
     expect(screen.queryByText("Ada Lovelace")).toBeNull();
     expect(screen.queryByText("Queued Ada")).toBeNull();
     expect(mocks.listSavedInquiriesRequest).not.toHaveBeenCalled();
-    expect(screen.getByRole("link", { name: /Saved/ })).toBeVisible();
-    expect(screen.getByRole("link", { name: /Inquiry/ })).toBeVisible();
+    expect(screen.getByRole("link", { name: /询问记录/ })).toBeVisible();
+    expect(screen.getByRole("link", { name: /当前询问/ })).toBeVisible();
 
     const draft = await readInquiryDraft();
     expect(draft?.customer).toEqual({ name: "Draft Ada", company: "Draft Co", notes: "Keep me" });
@@ -264,8 +264,8 @@ describe("saved navigation", () => {
         <BottomNav />
       </>,
     );
-    expect(screen.getByRole("link", { name: /Saved/ })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: /^Search$/ })).not.toHaveAttribute("aria-current");
-    expect(await screen.findByText("Loading saved inquiries…")).toBeVisible();
+    expect(screen.getByRole("link", { name: /询问记录/ })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: /^搜索$/ })).not.toHaveAttribute("aria-current");
+    expect(await screen.findByText("正在载入询问记录……")).toBeVisible();
   });
 });

@@ -144,7 +144,7 @@ describe("saved inquiry CSV", () => {
 
   it("names the file with the export date", () => {
     expect(savedInquiryExportFilename(new Date(Date.UTC(2026, 8, 18)))).toBe(
-      "saved-inquiries-2026-09-18.csv",
+      "询问记录-2026-09-18.csv",
     );
   });
 });

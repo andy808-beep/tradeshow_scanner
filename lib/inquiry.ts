@@ -1,3 +1,4 @@
+import { recordedProductsText, selectedProductsText } from "@/lib/i18n/zh-cn";
 import type { CustomerDetails, InquiryLine } from "./types";
 
 export interface InquirySummary {
@@ -36,11 +37,11 @@ export function summarizeInquiry(lines: InquiryLine[]): InquirySummary {
 }
 
 export function selectedProductsLabel(productCount: number): string {
-  return productCount === 1 ? "1 product selected" : `${productCount} products selected`;
+  return selectedProductsText(productCount);
 }
 
 export function recordedProductsLabel(productCount: number): string {
-  return productCount === 1 ? "1 product recorded" : `${productCount} products recorded`;
+  return recordedProductsText(productCount);
 }
 
 export function canSubmitInquiry(lines: InquiryLine[], customer: CustomerDetails): boolean {

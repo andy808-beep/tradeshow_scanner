@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { zh } from "@/lib/i18n/zh-cn";
 import { formatSyncTime } from "@/lib/offline/authorization";
 import { readInquirySyncMeta } from "@/lib/offline/db";
 import {
@@ -41,9 +42,9 @@ export default function InquirySyncStatus() {
       const result = await syncInquiryOutbox(online);
       setSignInNeeded(result.requiresSignIn);
       if (result.requiresSignIn) {
-        setNotice("Sign in while online to synchronize saved inquiries.");
+        setNotice(zh.sync.authFailure);
       } else if (result.awaiting === 0 && result.needsAttention === 0 && result.synchronized > 0) {
-        setNotice("All inquiries synchronized.");
+        setNotice(zh.sync.allSynchronized);
       } else {
         setNotice(null);
       }
@@ -90,10 +91,10 @@ export default function InquirySyncStatus() {
       <div className="flex items-center justify-between gap-2">
         <p className="text-[11px] leading-snug text-porcelain-800">
           {pending > 0
-            ? `${pending} ${pending === 1 ? "inquiry" : "inquiries"} awaiting sync`
+            ? zh.sync.pendingCount(pending)
             : attention > 0
-              ? `${attention} ${attention === 1 ? "inquiry needs" : "inquiries need"} attention`
-              : "All inquiries synchronized"}
+              ? zh.sync.attentionCount(attention)
+              : zh.sync.allSynchronized}
         </p>
         <button
           type="button"
@@ -103,17 +104,17 @@ export default function InquirySyncStatus() {
           disabled={syncing || !online}
           className="rounded-lg border border-porcelain-400 px-2.5 py-1 text-[11px] font-semibold text-porcelain-800 disabled:text-porcelain-400"
         >
-          {syncing ? "Syncing…" : "Sync inquiries"}
+          {syncing ? zh.sync.synchronizing : zh.sync.syncInquiries}
         </button>
       </div>
       {lastSyncedAt !== null && (
         <p className="mt-1 text-[11px] text-porcelain-600">
-          Last inquiry sync {formatSyncTime(lastSyncedAt)}
+          {zh.sync.lastInquirySync} {formatSyncTime(lastSyncedAt)}
         </p>
       )}
       {signInNeeded && (
         <p className="mt-1 text-[11px] font-medium text-amber-900">
-          Sign in while online to synchronize saved inquiries.
+          {zh.sync.authFailure}
         </p>
       )}
       {notice && !signInNeeded && (
@@ -124,12 +125,11 @@ export default function InquirySyncStatus() {
           href={savedInquiryHref}
           className="mt-1 inline-block text-[11px] font-semibold text-porcelain-800"
         >
-          View saved inquiry
+          {zh.inquiry.viewSaved}
         </a>
       )}
       <p className="mt-1 text-[10px] leading-snug text-porcelain-500">
-        Cached inquiry drafts on an unlocked authorized device can be read until
-        you log out.
+        {zh.sync.inquiryDeviceNotice}
       </p>
     </section>
   );

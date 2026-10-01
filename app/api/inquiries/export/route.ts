@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { withAuthenticatedApi } from "@/lib/auth/api";
 import { errorResponse } from "@/lib/api-response";
+import { zh } from "@/lib/i18n/zh-cn";
 import { buildSavedInquiryCsv, savedInquiryExportFilename } from "@/lib/saved-inquiries/csv";
 import { parseSavedInquiryListQuery } from "@/lib/saved-inquiries/query";
 import { listSavedInquiryExportRows } from "@/lib/supabase/saved-inquiries";
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
 export const GET = withAuthenticatedApi(async (request: Request) => {
   const parsed = parseSavedInquiryListQuery(new URL(request.url).searchParams);
   if (!parsed.ok) {
-    return errorResponse("The inquiry export could not be created.", 400, parsed.errors);
+    return errorResponse(zh.errors.exportFailed, 400, parsed.errors);
   }
 
   const rows = await listSavedInquiryExportRows(parsed.value);
@@ -23,7 +24,7 @@ export const GET = withAuthenticatedApi(async (request: Request) => {
     headers: {
       "Cache-Control": "private, no-store",
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Disposition": `attachment; filename="inquiries.csv"; filename*=UTF-8''${encodeURIComponent(filename)}`,
     },
   });
 });

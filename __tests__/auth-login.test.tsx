@@ -34,16 +34,16 @@ afterEach(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.signInAction.mockResolvedValue({ error: "Invalid email or password." });
+  mocks.signInAction.mockResolvedValue({ error: "邮箱或密码不正确。" });
 });
 
 describe("login form", () => {
   it("has email, password and sign-in, with no public sign-up UI", () => {
     render(<LoginForm nextPath={null} />);
 
-    expect(screen.getByLabelText("Email")).toHaveAttribute("type", "email");
-    expect(screen.getByLabelText("Password")).toHaveAttribute("type", "password");
-    expect(screen.getByRole("button", { name: "Sign in" })).toBeVisible();
+    expect(screen.getByLabelText("电子邮箱")).toHaveAttribute("type", "email");
+    expect(screen.getByLabelText("密码")).toHaveAttribute("type", "password");
+    expect(screen.getByRole("button", { name: "登录" })).toBeVisible();
     expect(screen.queryByRole("link", { name: /sign up|register|create account/i })).toBeNull();
     expect(screen.queryByText(/sign up/i)).toBeNull();
     expect(screen.queryByText(/register/i)).toBeNull();
@@ -53,16 +53,16 @@ describe("login form", () => {
   it("shows the invalid-login error from the server action", async () => {
     render(<LoginForm nextPath="/inquiry" />);
 
-    fireEvent.change(screen.getByLabelText("Email"), {
+    fireEvent.change(screen.getByLabelText("电子邮箱"), {
       target: { value: "andy@koeico.com" },
     });
-    fireEvent.change(screen.getByLabelText("Password"), {
+    fireEvent.change(screen.getByLabelText("密码"), {
       target: { value: "wrong-password" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    fireEvent.click(screen.getByRole("button", { name: "登录" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent("Invalid email or password.");
+      expect(screen.getByRole("alert")).toHaveTextContent("邮箱或密码不正确。");
     });
     expect(screen.getByRole("alert").textContent).not.toContain("wrong-password");
     expect(mocks.signInAction).toHaveBeenCalled();
@@ -82,7 +82,7 @@ describe("account control", () => {
   it("shows the employee email and a logout button", () => {
     render(<SiteHeader email="andy@koeico.com" />);
     expect(screen.getByText("andy@koeico.com")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Log out" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "退出登录" })).toBeVisible();
   });
 });
 
@@ -96,8 +96,12 @@ describe("no public sign-up route or copy", () => {
       path.join(process.cwd(), "components", "login-form.tsx"),
       "utf8",
     );
-    const combined = `${login}\n${form}`;
+    const copy = readFileSync(
+      path.join(process.cwd(), "lib", "i18n", "zh-cn.ts"),
+      "utf8",
+    );
+    const combined = `${login}\n${form}\n${copy}`;
     expect(combined).not.toMatch(/signUp|sign-up|create account|register/i);
-    expect(combined).toMatch(/Employee access only/);
+    expect(copy).toMatch(/仅供已获授权的 Koei 员工使用/);
   });
 });

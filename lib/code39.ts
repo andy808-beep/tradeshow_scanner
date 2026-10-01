@@ -1,3 +1,5 @@
+import { zh } from "@/lib/i18n/zh-cn";
+
 /**
  * Code 39 encoder for Koei product labels.
  *
@@ -56,13 +58,13 @@ export function code39IncompatibleCharacters(value: string): string[] {
 }
 
 export function describeCode39Error(value: string): string {
-  if (value === "") return "Product code is empty.";
+  if (value === "") return zh.labels.emptyCode;
   const invalid = code39IncompatibleCharacters(value);
   if (invalid.length === 0) return "";
   const shown = invalid
-    .map((character) => (character === " " ? "space" : character))
-    .join(", ");
-  return `Cannot encode “${value}” as Code 39. Unsupported: ${shown}.`;
+    .map((character) => (character === " " ? zh.labels.space : character))
+    .join("、");
+  return zh.labels.cannotEncode(value, shown);
 }
 
 export interface BarRun {

@@ -7,7 +7,7 @@ export async function generateMetadata(
   props: PageProps<"/products/[code]">,
 ): Promise<Metadata> {
   const { code } = await props.params;
-  return { title: `${decodeURIComponent(code)} · Koei Porcelain` };
+  return { title: `${decodeURIComponent(code)} | Koei 展会询问` };
 }
 
 export default async function ProductPage(props: PageProps<"/products/[code]">) {

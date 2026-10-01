@@ -71,7 +71,7 @@ function renderApp(ui: ReactNode) {
 }
 
 function typeQuery(value: string) {
-  fireEvent.change(screen.getByLabelText(/Search by product/), {
+  fireEvent.change(screen.getByLabelText(/搜索产品/), {
     target: { value },
   });
 }
@@ -119,7 +119,7 @@ describe("online cold-start catalogue", () => {
     typeQuery("K10188-13");
     expect(await screen.findByText("K10188-13")).toBeVisible();
     expect(await screen.findByText("Abbesses Plate - L")).toBeVisible();
-    expect(screen.queryByText("Catalogue not synchronized")).toBeNull();
+    expect(screen.queryByText("尚未同步产品资料")).toBeNull();
   });
 
   it("resolves a barcode through the product API when IndexedDB is empty", async () => {
@@ -158,9 +158,9 @@ describe("online cold-start catalogue", () => {
 
     renderApp(<CatalogueStatus />);
 
-    expect(await screen.findByText(/1 product/)).toBeVisible();
+    expect(await screen.findByText(/1 款产品/)).toBeVisible();
     expect(catalogueCalls()).toHaveLength(1);
-    expect(await screen.findByRole("button", { name: "Sync products" })).toBeEnabled();
+    expect(await screen.findByRole("button", { name: "同步产品资料" })).toBeEnabled();
   });
 
   it("keeps search usable while the background refresh is running", async () => {
@@ -182,10 +182,10 @@ describe("online cold-start catalogue", () => {
       </>,
     );
 
-    expect(await screen.findByText("Syncing…")).toBeVisible();
+    expect(await screen.findByText("正在同步产品资料……")).toBeVisible();
     typeQuery("K10188-13");
     expect(await screen.findByText("K10188-13")).toBeVisible();
-    expect(screen.getByText("Syncing…")).toBeVisible();
+    expect(screen.getByText("正在同步产品资料……")).toBeVisible();
     expect(catalogueCalls()).toHaveLength(1);
   });
 
@@ -209,7 +209,7 @@ describe("online cold-start catalogue", () => {
       </>,
     );
 
-    expect(await screen.findByText(/Last synced/)).toBeVisible();
+    expect(await screen.findByText(/产品资料上次同步时间/)).toBeVisible();
     expect(await screen.findByText(LOOKUP_MESSAGES.syncFailed)).toBeVisible();
     typeQuery("K10188-13");
     expect(await screen.findByText("K10188-13")).toBeVisible();
@@ -229,7 +229,9 @@ describe("online cold-start catalogue", () => {
 
     expect(await screen.findByText(LOOKUP_MESSAGES.expired)).toBeVisible();
     typeQuery("K10188-13");
-    expect(await screen.findByText("Offline access expired")).toBeVisible();
+    expect(
+      (await screen.findAllByText("本机产品资料已过期，请联网后重新同步。")).length,
+    ).toBeGreaterThan(0);
     expect(screen.queryByText("Abbesses Plate - L")).toBeNull();
     expect(catalogueCalls()).toHaveLength(0);
   });
@@ -247,17 +249,17 @@ describe("online cold-start catalogue", () => {
     });
 
     renderApp(<CatalogueStatus />);
-    expect(await screen.findByText("Syncing…")).toBeVisible();
+    expect(await screen.findByText("正在同步产品资料……")).toBeVisible();
     await waitFor(() => expect(catalogueCalls()).toHaveLength(1));
 
     const manual = syncProductCatalogue();
-    fireEvent.click(screen.getByRole("button", { name: "Syncing…" }));
+    fireEvent.click(screen.getByRole("button", { name: "正在同步产品资料……" }));
     expect(catalogueCalls()).toHaveLength(1);
 
     expect(typeof settle).toBe("function");
     settle!(jsonResponse({ products: [PRODUCT], count: 1 }));
     await manual;
-    expect(await screen.findByText(/1 product/)).toBeVisible();
+    expect(await screen.findByText(/1 款产品/)).toBeVisible();
     expect(catalogueCalls()).toHaveLength(1);
   });
 

@@ -7,12 +7,12 @@ import {
   parsePriceInput,
   sanitizeDecimalInput,
 } from "@/lib/inquiry";
+import { zh } from "@/lib/i18n/zh-cn";
 import { productTitle, type InquiryLine } from "@/lib/types";
 import { useInquiry } from "./inquiry-store";
 
-export const NO_LISTED_PRICE_MESSAGE =
-  "Listed price unavailable — enter a quoted price";
-export const PRICE_REQUIRED_MESSAGE = "Enter a quoted price before saving";
+export const NO_LISTED_PRICE_MESSAGE = zh.product.listedMissing;
+export const PRICE_REQUIRED_MESSAGE = zh.product.quoteRequired;
 
 export default function InquiryLineCard({ line }: { line: InquiryLine }) {
   const { setQuotedUnitPrice, setLineNotes, removeLine } = useInquiry();
@@ -56,14 +56,14 @@ export default function InquiryLineCard({ line }: { line: InquiryLine }) {
           onClick={() => removeLine(product.id)}
           className="shrink-0 text-sm font-medium text-porcelain-500 underline"
         >
-          Remove product
+          {zh.actions.remove}
         </button>
       </div>
 
       <div className="mt-4 space-y-3">
         {product.unitPrice !== null && (
           <div className="flex items-baseline justify-between gap-3">
-            <span className="text-sm text-porcelain-600">Listed unit price</span>
+            <span className="text-sm text-porcelain-600">{zh.product.listedUnitPrice}</span>
             <span className="text-sm font-medium text-porcelain-950">
               {formatMoney(product.unitPrice, product.currency)}
             </span>
@@ -73,7 +73,7 @@ export default function InquiryLineCard({ line }: { line: InquiryLine }) {
         <div>
           <div className="flex items-center justify-between gap-3">
             <label htmlFor={`price-${product.id}`} className="text-sm text-porcelain-600">
-              Quoted unit price
+              {zh.product.quotedUnitPrice}
             </label>
             <div className="flex items-center gap-1.5">
               <span className="text-sm text-porcelain-500">
@@ -86,7 +86,7 @@ export default function InquiryLineCard({ line }: { line: InquiryLine }) {
                 value={priceDraft ?? storedPrice}
                 onChange={(event) => handlePriceChange(event.target.value)}
                 onBlur={() => setPriceDraft(null)}
-                placeholder="Required"
+                placeholder={zh.actions.required}
                 aria-invalid={priceError !== null}
                 aria-describedby={priceError ? `price-error-${product.id}` : undefined}
                 className={`h-11 w-28 rounded-lg border bg-white px-3 text-right text-base font-semibold text-porcelain-950 placeholder:text-sm placeholder:font-normal focus:ring-2 focus:outline-none ${
@@ -111,13 +111,13 @@ export default function InquiryLineCard({ line }: { line: InquiryLine }) {
 
         <div>
           <label htmlFor={`notes-${product.id}`} className="mb-1 block text-sm text-porcelain-600">
-            Product notes
+            {zh.product.notes}
           </label>
           <textarea
             id={`notes-${product.id}`}
             value={line.notes}
             onChange={(event) => setLineNotes(product.id, event.target.value)}
-            placeholder="Optional"
+            placeholder={zh.actions.optional}
             rows={2}
             className="w-full resize-y rounded-lg border border-porcelain-300 bg-white px-3 py-2 text-sm text-porcelain-950 placeholder:text-porcelain-400 focus:border-porcelain-500 focus:ring-2 focus:ring-porcelain-200 focus:outline-none"
           />

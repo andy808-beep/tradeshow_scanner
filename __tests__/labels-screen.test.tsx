@@ -87,7 +87,7 @@ describe("printed label content", () => {
 
   it("surfaces an invalid code instead of drawing a barcode", () => {
     render(<LabelSheet products={[INVALID]} layout={DEFAULT_LABEL_LAYOUT} />);
-    expect(screen.getByText(/Cannot encode/)).toBeVisible();
+    expect(screen.getByText(/无法将/)).toBeVisible();
     expect(screen.queryByRole("img", { name: /Code 39 barcode/ })).toBeNull();
   });
 });
@@ -97,7 +97,7 @@ describe("PDF export layout", () => {
     render(<LabelsScreen />);
     await waitFor(() => expect(mocks.listLabelProductsRequest).toHaveBeenCalled());
 
-    expect(screen.queryByRole("button", { name: "Print" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "打印" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Print preview" })).toBeNull();
     expect(screen.queryByText("Browser print (secondary)")).toBeNull();
     expect(screen.queryByRole("button", { name: "Exit preview" })).toBeNull();
@@ -105,55 +105,55 @@ describe("PDF export layout", () => {
 
   it("offers PDF export with the A4 template, calibration and print instructions", async () => {
     render(<LabelsScreen />);
-    await waitFor(() => expect(screen.getByLabelText("Select K10188-13")).toBeTruthy());
+    await waitFor(() => expect(screen.getByLabelText("选择 K10188-13")).toBeTruthy());
 
-    expect(screen.getByRole("button", { name: "Export PDF" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Calibration PDF" })).toBeEnabled();
-    expect(screen.getByText("A4 — 40 labels — 52.5 × 29.7 mm")).toBeVisible();
+    expect(screen.getByRole("button", { name: "导出 PDF" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "校准 PDF" })).toBeEnabled();
+    expect(screen.getByText("A4 — 40 枚标签 — 52.5 × 29.7 mm")).toBeVisible();
     expect(screen.queryByText("A4 — 21 labels — 70 × 42.3 mm")).toBeNull();
     expect(screen.queryByText("A4 — 10 labels — 105 × 57 mm")).toBeNull();
     expect(screen.queryByRole("combobox")).toBeNull();
-    expect(screen.getByLabelText("Start at label")).toHaveAttribute("max", "40");
-    expect(screen.getByLabelText("Start at label")).toHaveAttribute("min", "1");
-    expect(screen.getByText(/positions 1–40/i)).toBeVisible();
-    expect(screen.getByLabelText("Start at label")).toBeVisible();
-    expect(screen.getByLabelText("Horizontal offset (mm)")).toBeVisible();
-    expect(screen.getByLabelText("Vertical offset (mm)")).toBeVisible();
-    expect(screen.getByText(/Load the A4 sticker sheet/)).toBeVisible();
-    expect(screen.getByText(/Print at 100% \/ Actual size/)).toBeVisible();
-    expect(screen.getByText(/First print the calibration PDF on ordinary A4 paper/)).toBeVisible();
+    expect(screen.getByLabelText("从第几个标签开始")).toHaveAttribute("max", "40");
+    expect(screen.getByLabelText("从第几个标签开始")).toHaveAttribute("min", "1");
+    expect(screen.getByText(/1–40/i)).toBeVisible();
+    expect(screen.getByLabelText("从第几个标签开始")).toBeVisible();
+    expect(screen.getByLabelText("水平偏移（mm）")).toBeVisible();
+    expect(screen.getByLabelText("垂直偏移（mm）")).toBeVisible();
+    expect(screen.getByText(/将 A4 标签纸放入打印机推荐的标签纸盒/)).toBeVisible();
+    expect(screen.getByText(/按 100% \/ 实际大小打印/)).toBeVisible();
+    expect(screen.getByText(/请先用普通 A4 纸打印校准 PDF/)).toBeVisible();
   });
 });
 
 describe("selection and copies in the page", () => {
   it("selects one product and all search results", async () => {
     render(<LabelsScreen />);
-    await waitFor(() => expect(screen.getByLabelText("Select K10188-13")).toBeTruthy());
+    await waitFor(() => expect(screen.getByLabelText("选择 K10188-13")).toBeTruthy());
 
     await act(async () => {
-      screen.getByLabelText("Select K10188-13").click();
+      screen.getByLabelText("选择 K10188-13").click();
     });
-    expect((screen.getByLabelText("Select K10188-13") as HTMLInputElement).checked).toBe(
+    expect((screen.getByLabelText("选择 K10188-13") as HTMLInputElement).checked).toBe(
       true,
     );
 
     await act(async () => {
-      screen.getByRole("button", { name: "Select all search results" }).click();
+      screen.getByRole("button", { name: "全选" }).click();
     });
-    expect((screen.getByLabelText("Select k-lowercase") as HTMLInputElement).checked).toBe(
+    expect((screen.getByLabelText("选择 k-lowercase") as HTMLInputElement).checked).toBe(
       true,
     );
   });
 
   it("honours the copy count on the sheet", async () => {
     const { container } = render(<LabelsScreen />);
-    await waitFor(() => expect(screen.getByLabelText("Select K10188-13")).toBeTruthy());
+    await waitFor(() => expect(screen.getByLabelText("选择 K10188-13")).toBeTruthy());
 
     await act(async () => {
-      screen.getByLabelText("Select K10188-13").click();
+      screen.getByLabelText("选择 K10188-13").click();
     });
     await act(async () => {
-      fireEvent.change(screen.getByLabelText("Copies of K10188-13"), { target: { value: "3" } });
+      fireEvent.change(screen.getByLabelText("K10188-13 的打印数量"), { target: { value: "3" } });
     });
 
     await waitFor(() => {
@@ -172,14 +172,14 @@ describe("selection and copies in the page", () => {
     mocks.listLabelProductsRequest.mockResolvedValue(catalogue);
 
     const { container } = render(<LabelsScreen />);
-    await waitFor(() => expect(screen.getByLabelText("Select K10180-13")).toBeTruthy());
+    await waitFor(() => expect(screen.getByLabelText("选择 K10180-13")).toBeTruthy());
 
     await act(async () => {
-      screen.getByRole("button", { name: "Select all search results" }).click();
+      screen.getByRole("button", { name: "全选" }).click();
     });
 
-    expect(screen.getByRole("heading", { name: "Copies per product" })).toBeVisible();
-    expect(screen.getByText("8 products")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "每款打印数量" })).toBeVisible();
+    expect(screen.getByText("8 款产品")).toBeVisible();
 
     const scroller = container.querySelector("[data-copies-scroll]");
     expect(scroller).toBeTruthy();
@@ -189,20 +189,20 @@ describe("selection and copies in the page", () => {
     expect(scroller).toHaveClass("overscroll-contain");
     expect(scroller).toHaveClass("border");
 
-    const heading = screen.getByRole("heading", { name: "Copies per product" });
+    const heading = screen.getByRole("heading", { name: "每款打印数量" });
     expect(scroller?.contains(heading)).toBe(false);
-    expect(scroller?.textContent).not.toContain("8 products");
+    expect(scroller?.textContent).not.toContain("8 款产品");
 
-    expect(screen.getByLabelText("Copies of K10180-13")).toBeVisible();
-    expect(screen.getByLabelText("Copies of K10187-13")).toBeInTheDocument();
+    expect(screen.getByLabelText("K10180-13 的打印数量")).toBeVisible();
+    expect(screen.getByLabelText("K10187-13 的打印数量")).toBeInTheDocument();
 
     await act(async () => {
-      fireEvent.change(screen.getByLabelText("Copies of K10182-13"), {
+      fireEvent.change(screen.getByLabelText("K10182-13 的打印数量"), {
         target: { value: "4" },
       });
     });
-    expect((screen.getByLabelText("Copies of K10182-13") as HTMLInputElement).value).toBe("4");
-    expect((screen.getByLabelText("Copies of K10180-13") as HTMLInputElement).value).toBe("1");
+    expect((screen.getByLabelText("K10182-13 的打印数量") as HTMLInputElement).value).toBe("4");
+    expect((screen.getByLabelText("K10180-13 的打印数量") as HTMLInputElement).value).toBe("1");
 
     await waitFor(() => {
       expect(container.querySelectorAll("[data-product-code='K10182-13']").length).toBe(4);

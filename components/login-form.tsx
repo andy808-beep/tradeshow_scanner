@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { signInAction, type SignInState } from "@/lib/auth/actions";
+import { zh } from "@/lib/i18n/zh-cn";
 
 const fieldClasses =
   "h-11 w-full rounded-lg border border-porcelain-300 bg-white px-3 text-base text-porcelain-950 placeholder:text-porcelain-400 focus:border-porcelain-500 focus:ring-2 focus:ring-porcelain-200 focus:outline-none disabled:bg-porcelain-50";
@@ -20,7 +21,7 @@ export default function LoginForm({ nextPath }: { nextPath: string | null }) {
 
       <div>
         <label htmlFor="email" className={labelClasses}>
-          Email
+          {zh.auth.email}
         </label>
         <input
           id="email"
@@ -38,7 +39,7 @@ export default function LoginForm({ nextPath }: { nextPath: string | null }) {
 
       <div>
         <label htmlFor="password" className={labelClasses}>
-          Password
+          {zh.auth.password}
         </label>
         <input
           id="password"
@@ -69,7 +70,7 @@ export default function LoginForm({ nextPath }: { nextPath: string | null }) {
         aria-busy={pending}
         className="h-11 w-full rounded-xl bg-porcelain-700 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-porcelain-800 disabled:opacity-70"
       >
-        {pending ? "Signing in…" : "Sign in"}
+        {pending ? zh.auth.signingIn : zh.auth.signIn}
       </button>
     </form>
   );

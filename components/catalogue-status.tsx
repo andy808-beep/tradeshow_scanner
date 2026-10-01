@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useState } from "react";
 import { formatExpiryDate, formatSyncTime } from "@/lib/offline/authorization";
+import { zh } from "@/lib/i18n/zh-cn";
 import { LOOKUP_MESSAGES, READINESS_MESSAGES } from "@/lib/offline/constants";
 import { useCatalogue } from "./catalogue-provider";
 
@@ -24,7 +25,7 @@ export default function CatalogueStatus() {
             online ? "text-emerald-800" : "text-amber-800"
           }`}
         >
-          {online ? "Online" : "Offline"}
+          {online ? zh.sync.online : zh.sync.offline}
         </p>
         <div className="flex items-center gap-2">
           {stage === "cameraTest" && (
@@ -33,7 +34,7 @@ export default function CatalogueStatus() {
               onClick={() => setTestingCamera(true)}
               className="rounded-lg border border-porcelain-400 px-2.5 py-1 text-[11px] font-semibold text-porcelain-800"
             >
-              Test camera
+              {zh.scanner.testCamera}
             </button>
           )}
           <button
@@ -44,25 +45,20 @@ export default function CatalogueStatus() {
             disabled={syncing || !online}
             className="rounded-lg bg-porcelain-700 px-2.5 py-1 text-[11px] font-semibold text-white disabled:bg-porcelain-300"
           >
-            {syncing ? "Syncing…" : "Sync products"}
+            {syncing ? zh.sync.syncingProducts : zh.sync.syncProducts}
           </button>
         </div>
       </div>
 
       {lastSynced ? (
         <p className="mt-1 text-[11px] leading-snug text-porcelain-700">
-          Last synced {formatSyncTime(lastSynced)}
-          {meta
-            ? ` · ${meta.count} ${meta.count === 1 ? "product" : "products"}`
-            : ""}
-          . Offline prices expire {expiresAt ? formatExpiryDate(expiresAt) : ""}.
+          {zh.sync.lastProductSync} {formatSyncTime(lastSynced)}
+          {meta ? ` · ${meta.count} 款产品` : ""}
+          。{zh.sync.offlinePricesExpire} {expiresAt ? formatExpiryDate(expiresAt) : ""}。
         </p>
       ) : (
         <p className="mt-1 text-[11px] leading-snug text-amber-900">
-          No offline catalogue on this device.{" "}
-          {online
-            ? "Search and scan still work online. Sync products to use them offline."
-            : LOOKUP_MESSAGES.unsynced}
+          {online ? zh.sync.missingOnline : LOOKUP_MESSAGES.unsynced}
         </p>
       )}
 
@@ -101,8 +97,7 @@ export default function CatalogueStatus() {
       )}
 
       <p className="mt-1 text-[10px] leading-snug text-porcelain-500">
-        Anyone with this unlocked authorized device can read cached prices and
-        inquiry drafts until that expiry. Log out to erase local data.
+        {zh.sync.catalogueDeviceNotice}
       </p>
 
       {/* Mounted only on the tap above, so the camera is never requested

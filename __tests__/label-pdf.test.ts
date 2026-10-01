@@ -148,7 +148,7 @@ describe("millimetre to PDF point conversion", () => {
 describe("A4 40-up template", () => {
   it("is 4×10 of 52.5 × 29.7 mm with zero margins and gaps", () => {
     expect(LABEL_PDF_TEMPLATE).toBe(A4_40_LABELS_52x29);
-    expect(A4_40_LABELS_52x29.name).toBe("A4 — 40 labels — 52.5 × 29.7 mm");
+    expect(A4_40_LABELS_52x29.name).toBe("A4 — 40 枚标签 — 52.5 × 29.7 mm");
     expect(A4_40_LABELS_52x29.columns).toBe(4);
     expect(A4_40_LABELS_52x29.rows).toBe(10);
     expect(A4_40_LABELS_52x29.labelWidthMm).toBe(52.5);
@@ -298,7 +298,7 @@ describe("production PDF", () => {
     expect(plan.pageHeightMm).toBe(297);
     expect(plan.pageCount).toBe(1);
     expect(plan.calibrationMarks).toBe(false);
-    expect(plan.templateName).toBe("A4 — 40 labels — 52.5 × 29.7 mm");
+    expect(plan.templateName).toBe("A4 — 40 枚标签 — 52.5 × 29.7 mm");
     expect(plan.skippedCodes).toEqual([]);
 
     const pdf = await PDFDocument.load(bytes);
@@ -472,7 +472,7 @@ describe("calibration PDF", () => {
       height: mmToPt(297),
     });
 
-    expect(plan.markTexts.some((text) => text.includes("Calibration sheet"))).toBe(true);
+    expect(plan.markTexts.some((text) => text.includes("校准页"))).toBe(true);
     expect(plan.markTexts).toContain("10 mm");
     expect(plan.markTexts).toContain("210 mm");
     expect(plan.markTexts).toContain("297 mm");

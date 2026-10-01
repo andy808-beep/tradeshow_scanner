@@ -172,9 +172,9 @@ describe("/inquiry opens offline from the cached shell", () => {
 
     renderApp(<AppScreens>{null}</AppScreens>);
 
-    expect(await screen.findByText("No products yet")).toBeVisible();
+    expect(await screen.findByText("询问单中还没有产品")).toBeVisible();
     expect(fetchSpy).not.toHaveBeenCalled();
-    expect(screen.queryByRole("button", { name: "Save inquiry" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "保存询问单" })).toBeNull();
   });
 });
 
@@ -186,12 +186,12 @@ describe("draft persistence", () => {
         <InquiryScreen />
       </Seed>,
     );
-    await screen.findByRole("button", { name: "Save inquiry" });
-    fireEvent.change(screen.getByLabelText(/Name/), { target: { value: "Ada Lovelace" } });
-    fireEvent.change(screen.getByLabelText("Company"), { target: { value: "Koei" } });
-    fireEvent.change(screen.getByLabelText(/^Notes$/), { target: { value: "Booth A" } });
-    fireEvent.change(screen.getByLabelText("Quoted unit price"), { target: { value: "3.5" } });
-    fireEvent.change(screen.getByLabelText("Product notes"), { target: { value: "Gift box" } });
+    await screen.findByRole("button", { name: "保存询问单" });
+    fireEvent.change(screen.getByLabelText(/客户姓名/), { target: { value: "Ada Lovelace" } });
+    fireEvent.change(screen.getByLabelText("公司名称"), { target: { value: "Koei" } });
+    fireEvent.change(screen.getByLabelText("询问备注"), { target: { value: "Booth A" } });
+    fireEvent.change(screen.getByLabelText("报价单价"), { target: { value: "3.5" } });
+    fireEvent.change(screen.getByLabelText("产品备注"), { target: { value: "Gift box" } });
 
     await waitFor(async () => {
       const stored = await readInquiryDraft();
@@ -205,12 +205,12 @@ describe("draft persistence", () => {
 
     renderApp(<InquiryScreen />);
     expect(await screen.findByDisplayValue("Ada Lovelace")).toBeVisible();
-    expect(screen.getByLabelText("Company")).toHaveValue("Koei");
-    expect(screen.getByLabelText(/^Notes$/)).toHaveValue("Booth A");
-    expect(screen.getByLabelText("Quoted unit price")).toHaveValue("3.5");
-    expect(screen.getByLabelText("Product notes")).toHaveValue("Gift box");
+    expect(screen.getByLabelText("公司名称")).toHaveValue("Koei");
+    expect(screen.getByLabelText("询问备注")).toHaveValue("Booth A");
+    expect(screen.getByLabelText("报价单价")).toHaveValue("3.5");
+    expect(screen.getByLabelText("产品备注")).toHaveValue("Gift box");
     expect(screen.getByText("K10188-13")).toBeVisible();
-    expect(screen.getByText("Draft")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "当前询问单" })).toBeVisible();
   });
 
   it("shows products added from details on the inquiry page", async () => {
@@ -231,7 +231,7 @@ describe("draft persistence", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open inquiry" }));
 
     expect(await screen.findByText("K10188-13")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Save inquiry" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "保存询问单" })).toBeVisible();
   });
 });
 
@@ -243,16 +243,16 @@ describe("local validation", () => {
         <InquiryScreen />
       </Seed>,
     );
-    await screen.findByRole("button", { name: "Save inquiry" });
-    expect(screen.getByRole("button", { name: "Save inquiry" })).toBeDisabled();
+    await screen.findByRole("button", { name: "保存询问单" });
+    expect(screen.getByRole("button", { name: "保存询问单" })).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText(/Name/), { target: { value: "Ada" } });
-    expect(screen.getByRole("button", { name: "Save inquiry" })).toBeEnabled();
+    fireEvent.change(screen.getByLabelText(/客户姓名/), { target: { value: "Ada" } });
+    expect(screen.getByRole("button", { name: "保存询问单" })).toBeEnabled();
 
     act(() => {
       inquiry().setQuotedUnitPrice(PLATE.id, null);
     });
-    expect(screen.getByRole("button", { name: "Save inquiry" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "保存询问单" })).toBeDisabled();
   });
 });
 
@@ -264,17 +264,17 @@ describe("offline save and immutable queue", () => {
         <InquiryScreen />
       </Seed>,
     );
-    await screen.findByRole("button", { name: "Save inquiry" });
-    fireEvent.change(screen.getByLabelText(/Name/), { target: { value: "Ada" } });
-    fireEvent.change(screen.getByLabelText("Company"), { target: { value: "Koei" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save inquiry" }));
+    await screen.findByRole("button", { name: "保存询问单" });
+    fireEvent.change(screen.getByLabelText(/客户姓名/), { target: { value: "Ada" } });
+    fireEvent.change(screen.getByLabelText("公司名称"), { target: { value: "Koei" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存询问单" }));
 
     expect(
-      await screen.findByText("Inquiry saved on this device — awaiting synchronization."),
+      await screen.findByText("该询问单已暂存至本设备，联网后将自动同步。"),
     ).toBeVisible();
-    expect(screen.getByRole("button", { name: "Start next inquiry" })).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Save inquiry" })).toBeNull();
-    expect(screen.queryByLabelText("Quoted unit price")).toBeNull();
+    expect(screen.getByRole("button", { name: "开始下一次询问" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "保存询问单" })).toBeNull();
+    expect(screen.queryByLabelText("报价单价")).toBeNull();
     expect(mocks.createInquiryRequest).not.toHaveBeenCalled();
 
     const queued = await listOutbox();
@@ -291,22 +291,22 @@ describe("offline save and immutable queue", () => {
     expect(JSON.stringify(queued[0].payload)).not.toMatch(/quantity/i);
   });
 
-  it("keeps the queued snapshot when Start next inquiry begins a new session", async () => {
+  it("keeps the queued snapshot when 开始下一次询问 begins a new session", async () => {
     goOffline();
     const { inquiry } = renderApp(
       <Seed product={PLATE}>
         <InquiryScreen />
       </Seed>,
     );
-    await screen.findByRole("button", { name: "Save inquiry" });
-    fireEvent.change(screen.getByLabelText(/Name/), { target: { value: "Ada" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save inquiry" }));
+    await screen.findByRole("button", { name: "保存询问单" });
+    fireEvent.change(screen.getByLabelText(/客户姓名/), { target: { value: "Ada" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存询问单" }));
     expect(
-      await screen.findByText("Inquiry saved on this device — awaiting synchronization."),
+      await screen.findByText("该询问单已暂存至本设备，联网后将自动同步。"),
     ).toBeVisible();
 
     const before = await listOutbox();
-    fireEvent.click(screen.getByRole("button", { name: "Start next inquiry" }));
+    fireEvent.click(screen.getByRole("button", { name: "开始下一次询问" }));
 
     await waitFor(() => {
       expect(inquiry().confirmation).toBeNull();
@@ -322,22 +322,22 @@ describe("offline save and immutable queue", () => {
         <InquiryScreen />
       </Seed>,
     );
-    await screen.findByRole("button", { name: "Save inquiry" });
-    fireEvent.change(screen.getByLabelText(/Name/), { target: { value: "Ada" } });
-    fireEvent.change(screen.getByLabelText("Company"), { target: { value: "Koei" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save inquiry" }));
-    await screen.findByRole("button", { name: "Start next inquiry" });
-    fireEvent.click(screen.getByRole("button", { name: "Start next inquiry" }));
+    await screen.findByRole("button", { name: "保存询问单" });
+    fireEvent.change(screen.getByLabelText(/客户姓名/), { target: { value: "Ada" } });
+    fireEvent.change(screen.getByLabelText("公司名称"), { target: { value: "Koei" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存询问单" }));
+    await screen.findByRole("button", { name: "开始下一次询问" });
+    fireEvent.click(screen.getByRole("button", { name: "开始下一次询问" }));
 
     await waitFor(() => expect(inquiry().confirmation).toBeNull());
     act(() => {
       inquiry().updateCustomer({ name: "Ada", company: "Koei" });
       inquiry().addProduct(CUP);
     });
-    fireEvent.change(await screen.findByLabelText(/Name/), { target: { value: "Ada" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save inquiry" }));
+    fireEvent.change(await screen.findByLabelText(/客户姓名/), { target: { value: "Ada" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存询问单" }));
     expect(
-      await screen.findByText("Inquiry saved on this device — awaiting synchronization."),
+      await screen.findByText("该询问单已暂存至本设备，联网后将自动同步。"),
     ).toBeVisible();
 
     const queued = await listOutbox();
@@ -409,7 +409,7 @@ describe("outbox synchronization", () => {
     expect(result.needsAttention).toBe(1);
     const rows = await listOutbox();
     expect(rows[0].status).toBe("needs_attention");
-    expect(rows[0].lastError).toMatch(/customer name/i);
+    expect(rows[0].lastError).toBe("该询问单的资料需要检查，请修正后重新同步。");
   });
 
   it("treats a successful retry as the same snapshot and stores the server id", async () => {
@@ -487,11 +487,11 @@ describe("sync triggers", () => {
     await waitFor(() => {
       expect(mocks.createInquiryRequest).toHaveBeenCalled();
     });
-    expect(await screen.findByRole("link", { name: "View saved inquiry" })).toHaveAttribute(
+    expect(await screen.findByRole("link", { name: "查看询问单" })).toHaveAttribute(
       "href",
       "/inquiries/server-online",
     );
-    expect(screen.getByText("All inquiries synchronized")).toBeVisible();
+    expect(screen.getAllByText("所有询问单均已同步").length).toBeGreaterThan(0);
   });
 
   it("retries when the app returns to the foreground", async () => {
@@ -515,7 +515,7 @@ describe("sync triggers", () => {
     });
   });
 
-  it("sends queued inquiries from the Sync inquiries button", async () => {
+  it("sends queued inquiries from the 同步询问记录 button", async () => {
     mocks.createInquiryRequest.mockResolvedValue("server-manual");
     await enqueueOutboxSnapshot(payload, {
       customerName: "Ada",
@@ -524,11 +524,11 @@ describe("sync triggers", () => {
       currency: "USD",
     });
     renderApp(<InquirySyncStatus />);
-    fireEvent.click(await screen.findByRole("button", { name: "Sync inquiries" }));
+    fireEvent.click(await screen.findByRole("button", { name: "同步询问记录" }));
     await waitFor(() => {
       expect(mocks.createInquiryRequest).toHaveBeenCalledTimes(1);
     });
-    expect(await screen.findByText(/Last inquiry sync/)).toBeVisible();
+    expect(await screen.findByText(/询问记录上次同步时间/)).toBeVisible();
   });
 });
 
@@ -598,8 +598,8 @@ describe("existing product add path still works", () => {
     await replaceCatalogue([PLATE], { lastSyncedAt: Date.now(), count: 1 });
     const { inquiry } = renderApp(<ProductDetailView product={PLATE} onBack={() => undefined} />);
     await waitForReady(inquiry);
-    fireEvent.click(await screen.findByRole("button", { name: "Add to inquiry" }));
+    fireEvent.click(await screen.findByRole("button", { name: "加入本次询问" }));
     expect(inquiry().lines).toHaveLength(1);
-    expect(screen.getByText("Added to inquiry")).toBeVisible();
+    expect(screen.getByText("已加入本次询问")).toBeVisible();
   }, 15_000);
 });

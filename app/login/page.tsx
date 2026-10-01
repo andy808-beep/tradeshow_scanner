@@ -3,12 +3,13 @@ import { redirect } from "next/navigation";
 import LoginForm from "@/components/login-form";
 import { safeNextPath } from "@/lib/auth/paths";
 import { getAuthenticatedUserOrNull } from "@/lib/auth/session";
+import { zh } from "@/lib/i18n/zh-cn";
 import { SupabaseConfigError } from "@/lib/supabase/errors";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Sign in · Koei Porcelain",
+  title: zh.titles.login,
   robots: { index: false, follow: false },
 };
 
@@ -31,15 +32,13 @@ export default async function LoginPage(props: PageProps<"/login">) {
     <>
       <header className="bg-porcelain-800 px-4 py-3 text-white shadow-sm">
         <p className="text-base leading-tight font-semibold tracking-tight">
-          Koei Porcelain
+          {zh.app.fullName}
         </p>
-        <p className="text-xs text-porcelain-200">Trade show inquiry tool</p>
+        <p className="text-xs text-porcelain-200">{zh.app.headerNote}</p>
       </header>
       <main className="flex-1 px-4 py-6">
-        <h1 className="text-lg font-semibold text-porcelain-950">Sign in</h1>
-        <p className="mt-1 mb-5 text-sm text-porcelain-600">
-          Employee access only. Accounts are issued by an administrator.
-        </p>
+        <h1 className="text-lg font-semibold text-porcelain-950">{zh.auth.employeeLogin}</h1>
+        <p className="mt-1 mb-5 text-sm text-porcelain-600">{zh.auth.description}</p>
         <LoginForm nextPath={nextPath} />
       </main>
     </>

@@ -1,5 +1,6 @@
 "use client";
 
+import { zh } from "@/lib/i18n/zh-cn";
 import { useInquiry } from "./inquiry-store";
 
 const fieldClasses =
@@ -13,20 +14,21 @@ export default function CustomerForm({ disabled }: { disabled?: boolean }) {
   return (
     <section className="rounded-xl border border-porcelain-200 bg-white p-4 shadow-sm">
       <h2 className="mb-3 text-sm font-semibold tracking-wide text-porcelain-600 uppercase">
-        Customer
+        {zh.inquiry.customerSection}
       </h2>
 
       <div className="space-y-3">
         <div>
           <label htmlFor="customer-name" className={labelClasses}>
-            Name <span className="text-porcelain-400">(required)</span>
+            {zh.inquiry.customerName}{" "}
+            <span className="text-porcelain-400">（{zh.actions.required}）</span>
           </label>
           <input
             id="customer-name"
             type="text"
             value={customer.name}
             onChange={(event) => updateCustomer({ name: event.target.value })}
-            placeholder="Contact name"
+            placeholder={zh.inquiry.customerName}
             autoComplete="off"
             disabled={disabled}
             className={fieldClasses}
@@ -35,14 +37,14 @@ export default function CustomerForm({ disabled }: { disabled?: boolean }) {
 
         <div>
           <label htmlFor="customer-company" className={labelClasses}>
-            Company
+            {zh.inquiry.companyName}
           </label>
           <input
             id="customer-company"
             type="text"
             value={customer.company}
             onChange={(event) => updateCustomer({ company: event.target.value })}
-            placeholder="Company name"
+            placeholder={zh.actions.optional}
             autoComplete="off"
             disabled={disabled}
             className={fieldClasses}
@@ -51,13 +53,13 @@ export default function CustomerForm({ disabled }: { disabled?: boolean }) {
 
           <div>
             <label htmlFor="customer-notes" className={labelClasses}>
-            Notes
+            {zh.inquiry.generalNotes}
           </label>
           <textarea
             id="customer-notes"
             value={customer.notes}
             onChange={(event) => updateCustomer({ notes: event.target.value })}
-            placeholder="Shipping, timing, samples requested…"
+            placeholder={zh.actions.optional}
             rows={3}
             disabled={disabled}
             className={`${fieldClasses} resize-y`}

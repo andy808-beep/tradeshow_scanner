@@ -23,10 +23,10 @@ function isProductApiRequest(request: Request): boolean {
 
 async function signIn(page: Page) {
   await page.goto("/login");
-  await page.getByLabel("Email").fill(TEST_EMAIL);
-  await page.getByLabel("Password").fill(TEST_PASSWORD);
-  await page.getByRole("button", { name: /sign in/i }).click();
-  await expect(page.getByRole("button", { name: "Sync products" })).toBeVisible();
+  await page.getByLabel("电子邮箱").fill(TEST_EMAIL);
+  await page.getByLabel("密码").fill(TEST_PASSWORD);
+  await page.getByRole("button", { name: "登录" }).click();
+  await expect(page.getByRole("button", { name: "同步产品资料" })).toBeVisible();
 }
 
 /** Counts what the browser itself committed to IndexedDB. */
@@ -64,8 +64,8 @@ test("finds, opens and quotes a synced product with the network off", async ({
 
   // 1 and 2. Authenticated sign-in, then a full catalogue sync.
   await signIn(page);
-  await page.getByRole("button", { name: "Sync products" }).click();
-  await expect(page.getByText(`${CATALOGUE_SIZE} products`)).toBeVisible({
+  await page.getByRole("button", { name: "同步产品资料" }).click();
+  await expect(page.getByText(`${CATALOGUE_SIZE} 款产品`)).toBeVisible({
     timeout: 30_000,
   });
 
@@ -74,16 +74,16 @@ test("finds, opens and quotes a synced product with the network off", async ({
 
   // 4. Cut the network for this browser context.
   await context.setOffline(true);
-  await expect(page.getByText("Offline", { exact: true })).toBeVisible();
+  await expect(page.getByText("离线", { exact: true })).toBeVisible();
   productRequests.length = 0;
 
   // 5 and 6. A known code resolves from the local catalogue, quickly.
   const started = Date.now();
-  await page.getByLabel(/Search by product/).fill(FEATURED_CODE);
+  await page.getByLabel(/搜索产品/).fill(FEATURED_CODE);
   const result = page.getByRole("button", { name: new RegExp(FEATURED_CODE) });
   await expect(result).toBeVisible({ timeout: 3_000 });
   expect(Date.now() - started).toBeLessThan(3_000);
-  await expect(page.getByText("Searching…")).toHaveCount(0);
+  await expect(page.getByText("正在搜索……")).toHaveCount(0);
 
   // 7. Nothing was asked of the product API.
   expect(productRequests).toEqual([]);
@@ -99,8 +99,8 @@ test("finds, opens and quotes a synced product with the network off", async ({
   expect(page.url()).toBe(urlBeforeOpening);
 
   // The cached product can still be quoted offline.
-  await page.getByRole("button", { name: "Add to inquiry" }).click();
-  await expect(page.getByText("Added to inquiry")).toBeVisible();
+  await page.getByRole("button", { name: "加入本次询问" }).click();
+  await expect(page.getByText("已加入本次询问")).toBeVisible();
 
   expect(productRequests).toEqual([]);
 });
@@ -110,16 +110,16 @@ test("reports an unknown offline code immediately instead of spinning", async ({
   context,
 }) => {
   await signIn(page);
-  await page.getByRole("button", { name: "Sync products" }).click();
-  await expect(page.getByText(`${CATALOGUE_SIZE} products`)).toBeVisible({
+  await page.getByRole("button", { name: "同步产品资料" }).click();
+  await expect(page.getByText(`${CATALOGUE_SIZE} 款产品`)).toBeVisible({
     timeout: 30_000,
   });
 
   await context.setOffline(true);
-  await page.getByLabel(/Search by product/).fill("ZZZ-NOT-A-CODE");
+  await page.getByLabel(/搜索产品/).fill("ZZZ-NOT-A-CODE");
 
-  await expect(page.getByText("No match in synchronized catalogue.")).toBeVisible({
+  await expect(page.getByText("没有找到符合条件的产品。")).toBeVisible({
     timeout: 3_000,
   });
-  await expect(page.getByText("Searching…")).toHaveCount(0);
+  await expect(page.getByText("正在搜索……")).toHaveCount(0);
 });

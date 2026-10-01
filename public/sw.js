@@ -1,4 +1,4 @@
-const SHELL_CACHE = "koei-shell-v1";
+const SHELL_CACHE = "koei-shell-v2";
 const SHELL_PREFIX = "koei-shell-";
 
 const PRECACHE_URLS = [

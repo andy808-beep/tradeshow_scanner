@@ -108,7 +108,7 @@ async function renderEditor(product: Product = PLATE) {
       <InquiryScreen />
     </Seed>,
   );
-  await screen.findByRole("button", { name: "Save inquiry" });
+  await screen.findByRole("button", { name: "保存询问单" });
   return view;
 }
 
@@ -127,39 +127,39 @@ beforeEach(() => {
 });
 
 describe("product-detail add workflow", () => {
-  it("adds a product once, then shows Added to inquiry with scan and view actions", () => {
+  it("adds a product once, then shows 已加入本次询问 with scan and view actions", () => {
     const { inquiry } = renderSession(
       <ProductDetailView product={PLATE} onBack={() => undefined} />,
     );
 
-    expect(screen.getByRole("button", { name: "Add to inquiry" })).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Add to inquiry" }));
+    expect(screen.getByRole("button", { name: "加入本次询问" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "加入本次询问" }));
 
     expect(inquiry().lines).toHaveLength(1);
     expect(inquiry().lines[0].product.id).toBe(PLATE.id);
     expect(inquiry().summary.productCount).toBe(1);
-    expect(screen.getByText("Added to inquiry")).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Add to inquiry" })).toBeNull();
+    expect(screen.getByText("已加入本次询问")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "加入本次询问" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add one more" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Scan another product" })).toBeVisible();
-    expect(screen.getByRole("link", { name: "View inquiry" })).toHaveAttribute("href", "/inquiry");
+    expect(screen.getByRole("button", { name: "继续扫码" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "查看询问单" })).toHaveAttribute("href", "/inquiry");
   });
 
-  it("shows Already in inquiry and does not change state for a selected product", async () => {
+  it("shows 该产品已在本次询问中 and does not change state for a selected product", async () => {
     const { inquiry } = renderSession(
       <Seed product={PLATE}>
         <ProductDetailView product={PLATE} onBack={() => undefined} />
       </Seed>,
     );
 
-    expect(await screen.findByText("Already in inquiry")).toBeVisible();
+    expect(await screen.findByText("该产品已在本次询问中")).toBeVisible();
     const snapshot = inquiry().lines;
 
-    fireEvent.click(screen.getByRole("button", { name: "Scan another product" }));
+    fireEvent.click(screen.getByRole("button", { name: "继续扫码" }));
     expect(inquiry().lines).toBe(snapshot);
     expect(inquiry().lines).toHaveLength(1);
-    expect(screen.queryByRole("button", { name: "Add to inquiry" })).toBeNull();
-    expect(screen.getByRole("link", { name: "View inquiry" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "加入本次询问" })).toBeNull();
+    expect(screen.getByRole("link", { name: "查看询问单" })).toBeVisible();
   });
 
   it("adds a second distinct product without duplicating the first", () => {
@@ -170,7 +170,7 @@ describe("product-detail add workflow", () => {
       </>,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Add to inquiry" }));
+    fireEvent.click(screen.getByRole("button", { name: "加入本次询问" }));
     fireEvent.click(screen.getByRole("button", { name: "Add cup" }));
 
     expect(inquiry().lines.map((line) => line.product.id)).toEqual([PLATE.id, CUP.id]);
@@ -197,17 +197,17 @@ describe("scan another product returns to search without mutating the inquiry", 
       </CatalogueProvider>,
     );
 
-    fireEvent.change(await screen.findByLabelText(/Search by product/), {
+    fireEvent.change(await screen.findByLabelText(/搜索产品/), {
       target: { value: "K10188-13" },
     });
     fireEvent.click(await screen.findByRole("button", { name: /K10188-13/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Add to inquiry" }));
+    fireEvent.click(await screen.findByRole("button", { name: "加入本次询问" }));
     expect(inquiry().lines).toHaveLength(1);
     const snapshot = inquiry().lines;
 
-    fireEvent.click(screen.getByRole("button", { name: "Scan another product" }));
+    fireEvent.click(screen.getByRole("button", { name: "继续扫码" }));
 
-    expect(await screen.findByLabelText(/Search by product/)).toBeVisible();
+    expect(await screen.findByLabelText(/搜索产品/)).toBeVisible();
     expect(inquiry().lines).toBe(snapshot);
     expect(inquiry().lines[0].product.id).toBe(PLATE.id);
   });
@@ -219,13 +219,13 @@ describe("inquiry editor before submission", () => {
 
     expect(screen.getByText("K10188-13")).toBeVisible();
     expect(screen.getByText("20.6 × 13.3 × 2.0 cm")).toBeVisible();
-    expect(screen.getByText("Listed unit price")).toBeVisible();
-    expect(screen.getByLabelText("Quoted unit price")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Remove product" })).toBeVisible();
-    expect(screen.getByText("1 product selected")).toBeVisible();
-    expect(screen.getByText(/Currency USD/)).toBeVisible();
-    expect(screen.getByText("All products have a quoted unit price.")).toBeVisible();
-    expect(screen.getByRole("link", { name: "Scan another product" })).toHaveAttribute("href", "/");
+    expect(screen.getByText("产品单价")).toBeVisible();
+    expect(screen.getByLabelText("报价单价")).toBeVisible();
+    expect(screen.getByRole("button", { name: "移除" })).toBeVisible();
+    expect(screen.getByText("已选择 1 款产品")).toBeVisible();
+    expect(screen.getByText(/币种 USD/)).toBeVisible();
+    expect(screen.getByText("每款产品均已填写报价单价。")).toBeVisible();
+    expect(screen.getByRole("link", { name: "继续扫码" })).toHaveAttribute("href", "/");
 
     expect(screen.queryByText(/^Quantity$/)).toBeNull();
     expect(screen.queryByLabelText(/quantity/i)).toBeNull();
@@ -241,48 +241,49 @@ describe("inquiry editor before submission", () => {
   it("blocks saving until every product has a valid quoted price", async () => {
     await renderEditor(UNPRICED);
 
-    fireEvent.change(screen.getByLabelText(/Name/), { target: { value: "Ada" } });
-    expect(screen.getByRole("button", { name: "Save inquiry" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/客户姓名/), { target: { value: "Ada" } });
+    expect(screen.getByRole("button", { name: "保存询问单" })).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText("Quoted unit price"), { target: { value: "0" } });
-    expect(screen.getByRole("button", { name: "Save inquiry" })).toBeEnabled();
+    fireEvent.change(screen.getByLabelText("报价单价"), { target: { value: "0" } });
+    expect(screen.getByRole("button", { name: "保存询问单" })).toBeEnabled();
   });
 
   it("rejects a negative quoted price in the editor", async () => {
     const { inquiry } = await renderEditor();
 
-    fireEvent.change(screen.getByLabelText(/Name/), { target: { value: "Ada" } });
-    fireEvent.change(screen.getByLabelText("Quoted unit price"), { target: { value: "-1" } });
+    fireEvent.change(screen.getByLabelText(/客户姓名/), { target: { value: "Ada" } });
+    fireEvent.change(screen.getByLabelText("报价单价"), { target: { value: "-1" } });
 
-    expect(screen.getByLabelText("Quoted unit price")).not.toHaveValue("-1");
+    expect(screen.getByLabelText("报价单价")).not.toHaveValue("-1");
     const quoted = inquiry().lines[0]?.quotedUnitPrice;
     expect(quoted === undefined || quoted === null || quoted >= 0).toBe(true);
   });
 });
 
 describe("submission", () => {
-  it("locks the inquiry after a successful save and shows only Start next inquiry", async () => {
+  it("locks the inquiry after a successful save and shows only 开始下一次询问", async () => {
     mocks.createInquiryRequest.mockResolvedValue("inquiry-99");
     await renderEditor();
 
-    fireEvent.change(screen.getByLabelText(/Name/), { target: { value: "Ada Lovelace" } });
-    fireEvent.change(screen.getByLabelText("Company"), { target: { value: "Koei" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save inquiry" }));
+    fireEvent.change(screen.getByLabelText(/客户姓名/), { target: { value: "Ada Lovelace" } });
+    fireEvent.change(screen.getByLabelText("公司名称"), { target: { value: "Koei" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存询问单" }));
 
-    expect(await screen.findByText("Inquiry saved")).toBeVisible();
+    expect(await screen.findByText("inquiry-99")).toBeVisible();
+    expect(screen.getByText("询问单已保存")).toBeVisible();
+    expect(screen.getByText("该询问单已成功保存。")).toBeVisible();
     expect(screen.getByText("Ada Lovelace")).toBeVisible();
     expect(screen.getByText("Koei")).toBeVisible();
-    expect(screen.getByText("1 product recorded")).toBeVisible();
-    expect(screen.getByText("inquiry-99")).toBeVisible();
-    expect(screen.getByRole("link", { name: "View saved inquiry" })).toHaveAttribute(
+    expect(screen.getByText("已记录 1 款产品")).toBeVisible();
+    expect(screen.getByRole("link", { name: "查看询问单" })).toHaveAttribute(
       "href",
       "/inquiries/inquiry-99",
     );
-    expect(screen.getByRole("button", { name: "Start next inquiry" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "开始下一次询问" })).toBeVisible();
 
-    expect(screen.queryByRole("button", { name: "Save inquiry" })).toBeNull();
-    expect(screen.queryByLabelText("Quoted unit price")).toBeNull();
-    expect(screen.queryByLabelText(/Name/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "保存询问单" })).toBeNull();
+    expect(screen.queryByLabelText("报价单价")).toBeNull();
+    expect(screen.queryByLabelText(/客户姓名/)).toBeNull();
     expect(screen.queryByRole("link", { name: /return to search/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /continue editing/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /add another product/i })).toBeNull();
@@ -306,16 +307,16 @@ describe("submission", () => {
     );
 
     await renderEditor();
-    fireEvent.change(screen.getByLabelText(/Name/), { target: { value: "Ada" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save inquiry" }));
-    const again = screen.queryByRole("button", { name: /Saving|Save inquiry/ });
+    fireEvent.change(screen.getByLabelText(/客户姓名/), { target: { value: "Ada" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存询问单" }));
+    const again = screen.queryByRole("button", { name: /正在保存|保存询问单/ });
     if (again) fireEvent.click(again);
 
     await waitFor(() => {
       expect(mocks.createInquiryRequest).toHaveBeenCalledTimes(1);
     });
     resolveSave?.("inquiry-1");
-    expect(await screen.findByText("Inquiry saved")).toBeVisible();
+    expect(await screen.findByText("询问单已保存")).toBeVisible();
     expect(mocks.createInquiryRequest).toHaveBeenCalledTimes(1);
   });
 
@@ -325,16 +326,16 @@ describe("submission", () => {
     );
 
     await renderEditor();
-    fireEvent.change(screen.getByLabelText(/Name/), { target: { value: "Ada" } });
-    fireEvent.change(screen.getByLabelText("Notes"), { target: { value: "Booth A" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save inquiry" }));
+    fireEvent.change(screen.getByLabelText(/客户姓名/), { target: { value: "Ada" } });
+    fireEvent.change(screen.getByLabelText("询问备注"), { target: { value: "Booth A" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存询问单" }));
 
     expect(
-      await screen.findByText("Inquiry saved on this device — awaiting synchronization."),
+      await screen.findByText("该询问单已暂存至本设备，联网后将自动同步。"),
     ).toBeVisible();
-    expect(screen.queryByRole("link", { name: "View saved inquiry" })).toBeNull();
-    expect(screen.queryByLabelText(/Name/)).toBeNull();
-    expect(screen.getByRole("button", { name: "Start next inquiry" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "查看询问单" })).toBeNull();
+    expect(screen.queryByLabelText(/客户姓名/)).toBeNull();
+    expect(screen.getByRole("button", { name: "开始下一次询问" })).toBeVisible();
 
     await waitFor(async () => {
       const queued = await listOutbox();
@@ -370,16 +371,17 @@ describe("confirmation survives screen remount and start next inquiry clears it"
     }
 
     render(<App />);
-    await screen.findByRole("button", { name: "Save inquiry" });
-    fireEvent.change(screen.getByLabelText(/Name/), { target: { value: "Ada" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save inquiry" }));
-    expect(await screen.findByText("Inquiry saved")).toBeVisible();
+    await screen.findByRole("button", { name: "保存询问单" });
+    fireEvent.change(screen.getByLabelText(/客户姓名/), { target: { value: "Ada" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存询问单" }));
+    expect(await screen.findByText("inquiry-locked")).toBeVisible();
+    expect(screen.getByText("询问单已保存")).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Remount" }));
-    expect(screen.getByText("Inquiry saved")).toBeVisible();
+    expect(screen.getByText("询问单已保存")).toBeVisible();
     expect(screen.getByText("inquiry-locked")).toBeVisible();
-    expect(screen.queryByLabelText("Quoted unit price")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Save inquiry" })).toBeNull();
+    expect(screen.queryByLabelText("报价单价")).toBeNull();
+    expect(screen.queryByRole("button", { name: "保存询问单" })).toBeNull();
   });
 
   it("clears the previous session and does not restore it as an editable draft", async () => {
@@ -422,13 +424,13 @@ describe("confirmation survives screen remount and start next inquiry clears it"
     }
 
     render(<App />);
-    await screen.findByRole("button", { name: "Save inquiry" });
-    fireEvent.change(screen.getByLabelText(/Name/), { target: { value: "Ada" } });
-    fireEvent.change(screen.getByLabelText("Company"), { target: { value: "Koei" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save inquiry" }));
-    expect(await screen.findByText("Inquiry saved")).toBeVisible();
+    await screen.findByRole("button", { name: "保存询问单" });
+    fireEvent.change(screen.getByLabelText(/客户姓名/), { target: { value: "Ada" } });
+    fireEvent.change(screen.getByLabelText("公司名称"), { target: { value: "Koei" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存询问单" }));
+    expect(await screen.findByText("询问单已保存")).toBeVisible();
 
-    fireEvent.click(screen.getByRole("button", { name: "Start next inquiry" }));
+    fireEvent.click(screen.getByRole("button", { name: "开始下一次询问" }));
     expect(mocks.replace).toHaveBeenCalledWith("/");
 
     fireEvent.click(screen.getByRole("button", { name: "Simulate back" }));
@@ -442,12 +444,12 @@ describe("confirmation survives screen remount and start next inquiry clears it"
     mocks.createInquiryRequest.mockResolvedValue("inquiry-next");
     const { inquiry } = await renderEditor();
 
-    fireEvent.change(screen.getByLabelText(/Name/), { target: { value: "Ada" } });
-    fireEvent.change(screen.getByLabelText("Company"), { target: { value: "Koei" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save inquiry" }));
-    expect(await screen.findByText("Inquiry saved")).toBeVisible();
+    fireEvent.change(screen.getByLabelText(/客户姓名/), { target: { value: "Ada" } });
+    fireEvent.change(screen.getByLabelText("公司名称"), { target: { value: "Koei" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存询问单" }));
+    expect(await screen.findByText("询问单已保存")).toBeVisible();
 
-    fireEvent.click(screen.getByRole("button", { name: "Start next inquiry" }));
+    fireEvent.click(screen.getByRole("button", { name: "开始下一次询问" }));
 
     await waitFor(() => {
       expect(inquiry().confirmation).toBeNull();

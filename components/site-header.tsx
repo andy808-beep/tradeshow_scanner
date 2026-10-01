@@ -1,3 +1,4 @@
+import { zh } from "@/lib/i18n/zh-cn";
 import LogoutButton from "./logout-button";
 
 export default function SiteHeader({ email }: { email: string }) {
@@ -6,9 +7,9 @@ export default function SiteHeader({ email }: { email: string }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-base leading-tight font-semibold tracking-tight">
-            Koei Porcelain
+            {zh.app.fullName}
           </p>
-          <p className="text-xs text-porcelain-200">Trade show inquiry tool</p>
+          <p className="text-xs text-porcelain-200">{zh.app.headerNote}</p>
         </div>
         <div className="flex min-w-0 max-w-[58%] flex-col items-end gap-0.5">
           <p

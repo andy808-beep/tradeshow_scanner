@@ -269,8 +269,8 @@ describe("inquiry summary", () => {
     expect(summary.allPriced).toBe(false);
     expect(summary).not.toHaveProperty("quotedTotal");
     expect(summary).not.toHaveProperty("totalQuantity");
-    expect(selectedProductsLabel(3)).toBe("3 products selected");
-    expect(selectedProductsLabel(1)).toBe("1 product selected");
+    expect(selectedProductsLabel(3)).toBe("已选择 3 款产品");
+    expect(selectedProductsLabel(1)).toBe("已选择 1 款产品");
   });
 
   it("counts a zero-priced line as priced", () => {
@@ -343,7 +343,7 @@ describe("a saved inquiry is locked until the next session starts", () => {
 
     expect(result.current.addProduct(UNPRICED)).toEqual({
       ok: false,
-      reason: expect.stringMatching(/already been saved/i),
+      reason: expect.stringMatching(/已保存/),
     });
     expect(result.current.confirmation?.customerName).toBe("Ada");
     expect(result.current.lines).toEqual([]);

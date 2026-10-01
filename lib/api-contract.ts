@@ -1,4 +1,5 @@
 import { DEFAULT_CURRENCY } from "./format";
+import { zh } from "@/lib/i18n/zh-cn";
 import type { Product } from "./types";
 
 /** Only one currency is supported, which also enforces "no mixing per inquiry". */
@@ -123,59 +124,59 @@ export function validateCreateInquiry(body: unknown): ValidationResult {
   const errors: string[] = [];
 
   if (!isRecord(body)) {
-    return { ok: false, errors: ["Request body must be a JSON object."] };
+    return { ok: false, errors: [zh.validation.requestBody] };
   }
 
   const customerName = readText(body.customerName);
   if (customerName === "") {
-    errors.push("A customer name is required.");
+    errors.push(zh.validation.customerName);
   } else if (customerName.length > MAX_TEXT_LENGTH) {
-    errors.push(`Customer name must be ${MAX_TEXT_LENGTH} characters or fewer.`);
+    errors.push(zh.validation.textTooLong(zh.inquiry.customerName, MAX_TEXT_LENGTH));
   }
 
   const companyName = readText(body.companyName);
   const notes = readText(body.notes);
 
   for (const [label, text] of [
-    ["Company name", companyName],
-    ["Notes", notes],
+    [zh.inquiry.companyName, companyName],
+    [zh.inquiry.generalNotes, notes],
   ] as const) {
     if (text.length > MAX_TEXT_LENGTH) {
-      errors.push(`${label} must be ${MAX_TEXT_LENGTH} characters or fewer.`);
+      errors.push(zh.validation.textTooLong(label, MAX_TEXT_LENGTH));
     }
   }
 
   const currency = readText(body.currency) || DEFAULT_CURRENCY;
   if (!SUPPORTED_CURRENCIES.includes(currency as (typeof SUPPORTED_CURRENCIES)[number])) {
-    errors.push(`Currency ${currency} is not supported.`);
+    errors.push(zh.validation.currencyUnsupported(currency));
   }
 
   const clientSubmissionId = readText(body.clientSubmissionId);
   if (clientSubmissionId === "") {
-    errors.push("A client submission id is required.");
+    errors.push(zh.validation.submissionIdRequired);
   } else if (!UUID_PATTERN.test(clientSubmissionId)) {
-    errors.push("Client submission id is not a valid UUID.");
+    errors.push(zh.validation.submissionIdInvalid);
   }
 
   const rawItems = body.items;
   const items: InquiryItemRequest[] = [];
 
   if (!Array.isArray(rawItems) || rawItems.length === 0) {
-    errors.push("At least one product is required.");
+    errors.push(zh.validation.productRequired);
   } else if (rawItems.length > MAX_INQUIRY_ITEMS) {
-    errors.push(`An inquiry cannot hold more than ${MAX_INQUIRY_ITEMS} products.`);
+    errors.push(zh.validation.tooManyProducts(MAX_INQUIRY_ITEMS));
   } else {
     rawItems.forEach((rawItem, index) => {
-      const position = `Item ${index + 1}`;
+      const position = index + 1;
 
       if (!isRecord(rawItem)) {
-        errors.push(`${position} is not an object.`);
+        errors.push(zh.validation.itemInvalid(position));
         return;
       }
 
       const productId = readText(rawItem.productId);
       if (!UUID_PATTERN.test(productId)) {
-        errors.push(`${position} has an invalid product id.`);
+        errors.push(zh.validation.productIdInvalid(position));
       }
 
       // A quoted price is mandatory. Zero is accepted as a deliberate choice,
@@ -183,18 +184,18 @@ export function validateCreateInquiry(body: unknown): ValidationResult {
       const raw = rawItem.quotedPrice;
       let quotedPrice = 0;
       if (raw === null || raw === undefined || raw === "") {
-        errors.push(`${position} needs a quoted price.`);
+        errors.push(`${zh.validation.item(position)}：${zh.validation.quotedPrice}`);
       } else if (typeof raw !== "number" || !Number.isFinite(raw)) {
-        errors.push(`${position} has an invalid quoted price.`);
+        errors.push(`${zh.validation.item(position)}：${zh.validation.invalidPrice}`);
       } else if (raw < 0) {
-        errors.push(`${position} cannot have a negative quoted price.`);
+        errors.push(`${zh.validation.item(position)}：${zh.validation.negativePrice}`);
       } else {
         quotedPrice = raw;
       }
 
       const itemNotes = readText(rawItem.notes);
       if (itemNotes.length > MAX_TEXT_LENGTH) {
-        errors.push(`${position} notes must be ${MAX_TEXT_LENGTH} characters or fewer.`);
+        errors.push(zh.validation.notesTooLong(position, MAX_TEXT_LENGTH));
       }
 
       if (errors.length === 0) {
@@ -204,7 +205,7 @@ export function validateCreateInquiry(body: unknown): ValidationResult {
 
     const uniqueIds = new Set(items.map((item) => item.productId));
     if (items.length > 0 && uniqueIds.size !== items.length) {
-      errors.push("The same product appears more than once.");
+      errors.push(zh.validation.duplicateProduct);
     }
   }
 

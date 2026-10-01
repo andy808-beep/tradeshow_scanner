@@ -1,15 +1,16 @@
 import { NextResponse } from "next/server";
 import type { ApiErrorResponse } from "./api-contract";
 import { AuthenticationError, AuthorizationError } from "./auth/errors";
+import { zh } from "@/lib/i18n/zh-cn";
 import {
   DatabaseError,
   InquiryValidationError,
   SupabaseConfigError,
 } from "./supabase/errors";
 
-export const DATABASE_UNAVAILABLE = "The product database is not available.";
-export const AUTHENTICATION_REQUIRED = "Authentication required.";
-export const NOT_AUTHORIZED = "You are not allowed to access this resource.";
+export const DATABASE_UNAVAILABLE = zh.errors.productDataUnavailable;
+export const AUTHENTICATION_REQUIRED = zh.auth.loginRequired;
+export const NOT_AUTHORIZED = zh.auth.notAuthorized;
 
 export function errorResponse(
   message: string,
@@ -51,5 +52,5 @@ export function handleRouteError(error: unknown): NextResponse<ApiErrorResponse>
   }
 
   console.error("Unexpected API error:", error);
-  return errorResponse("Something went wrong.", 500);
+  return errorResponse(zh.errors.general, 500);
 }

@@ -7,6 +7,7 @@ import type {
   SavedInquiryDetail,
   SavedInquiryListResponse,
 } from "./api-contract";
+import { zh } from "@/lib/i18n/zh-cn";
 import type { Product } from "./types";
 
 export class ApiError extends Error {
@@ -29,7 +30,7 @@ async function toApiError(response: Response): Promise<ApiError> {
     // Fall through to the generic message below.
   }
   return new ApiError(
-    body?.error ?? "The request failed.",
+    body?.error ?? zh.errors.general,
     response.status,
     body?.details ?? [],
   );
@@ -132,9 +133,13 @@ export async function exportSavedInquiriesRequest(
   });
   if (!response.ok) throw await toApiError(response);
   const header = response.headers.get("content-disposition") ?? "";
-  const match = /filename="([^"]+)"/.exec(header);
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  const plain = /filename="([^"]+)"/.exec(header);
+  const filename = encoded
+    ? decodeURIComponent(encoded[1])
+    : (plain?.[1] ?? "询问记录.csv");
   return {
     blob: await response.blob(),
-    filename: match?.[1] ?? "saved-inquiries.csv",
+    filename,
   };
 }

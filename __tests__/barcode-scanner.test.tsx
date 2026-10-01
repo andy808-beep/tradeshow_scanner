@@ -132,8 +132,8 @@ describe("camera startup", () => {
   it("asks for the rear camera and reports an active status", async () => {
     renderScanner();
 
-    expect(await screen.findByText("Camera active — point at a barcode")).toBeVisible();
-    expect(screen.getByText("Hold the barcode inside the frame.")).toBeVisible();
+    expect(await screen.findByText("扫描产品条码")).toBeVisible();
+    expect(screen.getByText("请将条码对准扫描框")).toBeVisible();
 
     const [constraints] = mocks.decodeFromConstraints.mock.calls[0];
     expect(constraints).toEqual({
@@ -144,7 +144,7 @@ describe("camera startup", () => {
 
   it("starts only one decode loop", async () => {
     renderScanner();
-    await screen.findByText("Camera active — point at a barcode");
+    await screen.findByText("扫描产品条码");
     expect(mocks.decodeFromConstraints).toHaveBeenCalledTimes(1);
   });
 });
@@ -157,9 +157,9 @@ describe("camera unavailable", () => {
 
     renderScanner();
 
-    expect(await screen.findByText(/Camera access was blocked/)).toBeVisible();
-    expect(screen.getByLabelText(/Enter the code or barcode/)).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Close scanner" })).toBeVisible();
+    expect(await screen.findByText(/摄像头权限未开启/)).toBeVisible();
+    expect(screen.getByLabelText(/无法扫码时，请输入产品编号或条码/)).toBeEnabled();
+    expect(screen.getByRole("button", { name: "关闭" })).toBeVisible();
   });
 
   it("reports when the device has no camera", async () => {
@@ -169,7 +169,7 @@ describe("camera unavailable", () => {
 
     renderScanner();
 
-    expect(await screen.findByText("No camera was found on this device.")).toBeVisible();
+    expect(await screen.findByText("此设备没有可用的摄像头。")).toBeVisible();
   });
 
   it("reports when the browser exposes no camera API at all", async () => {
@@ -181,7 +181,7 @@ describe("camera unavailable", () => {
     renderScanner();
 
     expect(
-      await screen.findByText("This browser does not provide camera access."),
+      await screen.findByText("此浏览器无法使用摄像头。"),
     ).toBeVisible();
     expect(mocks.decodeFromConstraints).not.toHaveBeenCalled();
   });
@@ -196,7 +196,7 @@ describe("successful decoding", () => {
     });
 
     renderScanner();
-    await screen.findByText("Camera active — point at a barcode");
+    await screen.findByText("扫描产品条码");
     await emit("K10188-13");
 
     await waitFor(() => {
@@ -209,7 +209,7 @@ describe("successful decoding", () => {
     const onCameraReady = vi.fn();
     renderScanner({ onCameraReady });
 
-    await screen.findByText("Camera active — point at a barcode");
+    await screen.findByText("扫描产品条码");
     expect(onCameraReady).toHaveBeenCalledTimes(1);
   });
 
@@ -217,7 +217,7 @@ describe("successful decoding", () => {
     const onCameraReady = vi.fn();
     renderScanner({ purpose: "test", onCameraReady });
 
-    await screen.findByText("Camera works — offline scanning is ready");
+    await screen.findByText("摄像头可用，已可离线扫码。");
     await emit("K10188-13");
 
     expect(onCameraReady).toHaveBeenCalledTimes(1);
@@ -233,7 +233,7 @@ describe("successful decoding", () => {
     });
 
     renderScanner();
-    await screen.findByText("Camera active — point at a barcode");
+    await screen.findByText("扫描产品条码");
     await emit("K10188-13");
 
     expect(mocks.controlsStop).toHaveBeenCalled();
@@ -250,7 +250,7 @@ describe("successful decoding", () => {
     });
 
     renderScanner();
-    await screen.findByText("Camera active — point at a barcode");
+    await screen.findByText("扫描产品条码");
     await emit("0012345678905");
 
     await waitFor(() => {
@@ -271,7 +271,7 @@ describe("successful decoding", () => {
     const onMultipleResults = vi.fn();
 
     renderScanner({ onMultipleResults });
-    await screen.findByText("Camera active — point at a barcode");
+    await screen.findByText("扫描产品条码");
     await emit("plate");
 
     await waitFor(() => {
@@ -284,21 +284,20 @@ describe("successful decoding", () => {
 describe("unknown barcode", () => {
   it("shows the raw value and offers to copy it", async () => {
     renderScanner();
-    await screen.findByText("Camera active — point at a barcode");
+    await screen.findByText("扫描产品条码");
     await emit("9999999999999");
 
-    expect(
-      await screen.findByText("No product found for barcode: 9999999999999"),
-    ).toBeVisible();
-    expect(screen.getByRole("button", { name: "Copy code" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Scan again" })).toBeVisible();
+    expect((await screen.findAllByText("未找到该产品。")).length).toBeGreaterThan(0);
+    expect(screen.getByText("9999999999999")).toBeVisible();
+    expect(screen.getByRole("button", { name: "复制编号" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "重新扫描" })).toBeVisible();
   });
 });
 
 describe("repeated detections", () => {
   it("looks up a code only once even when the decoder keeps firing", async () => {
     renderScanner();
-    await screen.findByText("Camera active — point at a barcode");
+    await screen.findByText("扫描产品条码");
 
     await emit("4901234567894");
     await emit("4901234567894");
@@ -311,7 +310,7 @@ describe("repeated detections", () => {
 
   it("ignores a different code once one has been handled", async () => {
     renderScanner();
-    await screen.findByText("Camera active — point at a barcode");
+    await screen.findByText("扫描产品条码");
 
     await emit("1111111111111");
     await emit("2222222222222");
@@ -324,7 +323,7 @@ describe("repeated detections", () => {
 describe("cleanup", () => {
   it("releases every MediaStream track on unmount", async () => {
     const view = renderScanner();
-    await screen.findByText("Camera active — point at a barcode");
+    await screen.findByText("扫描产品条码");
 
     view.unmount();
 
@@ -337,10 +336,10 @@ describe("cleanup", () => {
   it("releases the camera when the user closes the scanner", async () => {
     const onClose = vi.fn();
     renderScanner({ onClose });
-    await screen.findByText("Camera active — point at a barcode");
+    await screen.findByText("扫描产品条码");
 
     await act(async () => {
-      screen.getByRole("button", { name: "Close scanner" }).click();
+      screen.getByRole("button", { name: "关闭" }).click();
     });
 
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -363,9 +362,9 @@ describe("manual entry", () => {
     // The typed path resolves locally too, so no navigation is involved.
 
     renderScanner();
-    await screen.findByText(/Camera access was blocked/);
+    await screen.findByText(/摄像头权限未开启/);
 
-    const input = screen.getByLabelText(/Enter the code or barcode/);
+    const input = screen.getByLabelText(/无法扫码时，请输入产品编号或条码/);
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(
         window.HTMLInputElement.prototype,
@@ -376,7 +375,7 @@ describe("manual entry", () => {
     });
 
     await act(async () => {
-      screen.getByRole("button", { name: "Find" }).click();
+      screen.getByRole("button", { name: "搜索" }).click();
     });
 
     await waitFor(() => {

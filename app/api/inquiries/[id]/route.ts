@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { SavedInquiryDetailResponse } from "@/lib/api-contract";
 import { withAuthenticatedApi } from "@/lib/auth/api";
 import { errorResponse } from "@/lib/api-response";
+import { zh } from "@/lib/i18n/zh-cn";
 import { isSavedInquiryId } from "@/lib/saved-inquiries/query";
 import { getSavedInquiry } from "@/lib/supabase/saved-inquiries";
 
@@ -14,12 +15,12 @@ export const GET = withAuthenticatedApi(async (
 ) => {
   const { id } = await context.params;
   if (!isSavedInquiryId(id)) {
-    return errorResponse("Inquiry not found.", 404);
+    return errorResponse(zh.errors.savedInquiryNotFound, 404);
   }
 
   const inquiry = await getSavedInquiry(id);
   if (!inquiry) {
-    return errorResponse("Inquiry not found.", 404);
+    return errorResponse(zh.errors.savedInquiryNotFound, 404);
   }
 
   return NextResponse.json<SavedInquiryDetailResponse>(

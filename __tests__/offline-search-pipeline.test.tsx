@@ -107,11 +107,11 @@ function renderApp(ui: ReactNode) {
 async function syncedApp(ui: ReactNode) {
   await syncProductCatalogue(Date.now(), async () => catalogueResponse());
   renderApp(ui);
-  await waitFor(() => expect(screen.getByLabelText(/Search by product/)).toBeTruthy());
+  await waitFor(() => expect(screen.getByLabelText(/搜索产品/)).toBeTruthy());
 }
 
 function typeQuery(value: string) {
-  fireEvent.change(screen.getByLabelText(/Search by product/), {
+  fireEvent.change(screen.getByLabelText(/搜索产品/), {
     target: { value },
   });
 }
@@ -224,8 +224,8 @@ describe("offline search queries the local catalogue only", () => {
     await goOffline();
 
     typeQuery("ZZZ-NOPE");
-    expect(await screen.findByText(LOOKUP_MESSAGES.notFoundLocal)).toBeVisible();
-    expect(screen.queryByText("Searching…")).toBeNull();
+    expect(await screen.findByText("没有找到符合条件的产品。")).toBeVisible();
+    expect(screen.queryByText("正在搜索……")).toBeNull();
   });
 
   it("asks for a sync when no catalogue exists", async () => {
@@ -233,9 +233,9 @@ describe("offline search queries the local catalogue only", () => {
     renderApp(<SearchPanel />);
 
     typeQuery("K10188-13");
-    expect(await screen.findByText("Catalogue not synchronized")).toBeVisible();
+    expect(await screen.findByText("尚未同步产品资料")).toBeVisible();
     expect(await screen.findByText(LOOKUP_MESSAGES.unsynced)).toBeVisible();
-    expect(screen.queryByText("Searching…")).toBeNull();
+    expect(screen.queryByText("正在搜索……")).toBeNull();
   });
 });
 
@@ -250,7 +250,7 @@ describe("a stalled network cannot block local results", () => {
 
     typeQuery("K10188-13");
     expect(await screen.findByText("K10188-13")).toBeVisible();
-    expect(screen.queryByText("Searching…")).toBeNull();
+    expect(screen.queryByText("正在搜索……")).toBeNull();
   });
 
   it("keeps local results when the refresh rejects", async () => {
@@ -277,8 +277,8 @@ describe("selecting an offline result", () => {
     expect(screen.getByText("US$2.40")).toBeVisible();
     expect(screen.getByText("24 pcs/ctn")).toBeVisible();
 
-    fireEvent.click(screen.getByRole("button", { name: "Add to inquiry" }));
-    expect(await screen.findByText("Added to inquiry")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "加入本次询问" }));
+    expect(await screen.findByText("已加入本次询问")).toBeVisible();
     expect(productApiCalls()).toEqual([]);
   });
 
@@ -288,9 +288,9 @@ describe("selecting an offline result", () => {
 
     typeQuery("K10188-13");
     fireEvent.click(await screen.findByRole("button", { name: /K10188-13/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "← Back to search" }));
+    fireEvent.click(await screen.findByRole("button", { name: /返回搜索/ }));
 
-    expect(await screen.findByLabelText(/Search by product/)).toBeVisible();
+    expect(await screen.findByLabelText(/搜索产品/)).toBeVisible();
     expect(productApiCalls()).toEqual([]);
   });
 });
@@ -328,7 +328,7 @@ describe("logout still deletes the catalogue", () => {
     await replaceCatalogue(CATALOGUE, { lastSyncedAt: Date.now(), count: 102 });
     renderApp(<LogoutButton />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Log out" }));
+    fireEvent.click(screen.getByRole("button", { name: "退出登录" }));
 
     await waitFor(async () => {
       expect(await readCatalogueMeta()).toBeNull();

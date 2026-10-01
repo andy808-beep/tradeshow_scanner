@@ -235,7 +235,7 @@ describe("authenticated application APIs", () => {
     );
     expect(response.status).toBe(400);
     const body = await response.json();
-    expect(body.error).toBe("The inquiry could not be saved.");
+    expect(body.error).toBe("保存失败，请重试。");
     expect(mocks.createInquiry).not.toHaveBeenCalled();
   });
 });
@@ -253,7 +253,7 @@ describe("auth error mapping", () => {
     const response = handleRouteError(new AuthorizationError());
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toEqual({
-      error: "You are not allowed to access this resource.",
+      error: "您没有访问权限。",
     });
   });
 });

@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { ApiError } from "@/lib/api-client";
+import { zh } from "@/lib/i18n/zh-cn";
 import type { Product } from "@/lib/types";
 import {
   inspectCatalogueAccess,
@@ -32,7 +33,6 @@ import {
 } from "@/lib/offline/readiness";
 import { preloadScannerAssets } from "@/lib/offline/scanner-assets";
 import {
-  CatalogueVerificationError,
   requestBackgroundCatalogueSync,
   syncProductCatalogue,
   type CatalogueSyncResult,
@@ -165,14 +165,10 @@ export function CatalogueProvider({ children }: { children: ReactNode }) {
 
     setSyncError(
       error instanceof ApiError && error.status === 401
-        ? "Sign-in expired. Sign in again, then sync."
-        : error instanceof CatalogueVerificationError
-          ? `${error.message} ${
-              keptReady ? LOOKUP_MESSAGES.syncFailed : LOOKUP_MESSAGES.syncFailedRetry
-            }`
-          : keptReady
-            ? LOOKUP_MESSAGES.syncFailed
-            : LOOKUP_MESSAGES.syncFailedRetry,
+        ? zh.errors.sessionExpired
+        : keptReady
+          ? LOOKUP_MESSAGES.syncFailed
+          : LOOKUP_MESSAGES.syncFailedRetry,
     );
   }, []);
 

@@ -116,7 +116,7 @@ describe("createInquiry", () => {
 
   it("rejects a product that is missing or inactive", async () => {
     mocks.getActiveProductsByIds.mockResolvedValue(new Map());
-    await expect(createInquiry(request())).rejects.toThrow(/unavailable/i);
+    await expect(createInquiry(request())).rejects.toThrow(/未找到该产品/);
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 });

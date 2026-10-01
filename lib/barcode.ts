@@ -1,3 +1,4 @@
+import { zh } from "@/lib/i18n/zh-cn";
 import type { Product } from "./types";
 
 /**
@@ -116,14 +117,13 @@ export interface CameraErrorInfo {
 
 export const CAMERA_UNSUPPORTED: CameraErrorInfo = {
   reason: "unsupported",
-  message: "This browser does not provide camera access.",
+  message: zh.scanner.unsupported,
 };
 
 /** The decoder chunks were never cached, so scanning cannot start offline. */
 export const SCANNER_ASSETS_MISSING: CameraErrorInfo = {
   reason: "assetsMissing",
-  message:
-    "Scanner files are not on this device yet. Reconnect, tap Sync products, then run Test camera.",
+  message: zh.scanner.assetsMissing,
 };
 
 export function describeCameraError(error: unknown): CameraErrorInfo {
@@ -137,26 +137,25 @@ export function describeCameraError(error: unknown): CameraErrorInfo {
     case "PermissionDeniedError":
       return {
         reason: "denied",
-        message:
-          "Camera access was blocked. Allow the camera for this site in your browser settings, then try again.",
+        message: zh.scanner.permissionDenied,
       };
     case "NotFoundError":
     case "DevicesNotFoundError":
     case "OverconstrainedError":
-      return { reason: "noCamera", message: "No camera was found on this device." };
+      return { reason: "noCamera", message: zh.scanner.noCamera };
     case "NotReadableError":
     case "TrackStartError":
       return {
         reason: "inUse",
-        message: "The camera is being used by another app. Close it and try again.",
+        message: zh.scanner.cameraInUse,
       };
     case "SecurityError":
       return {
         reason: "insecure",
-        message: "The camera needs a secure (HTTPS) connection.",
+        message: zh.scanner.insecure,
       };
     default:
-      return { reason: "unknown", message: "The camera could not be started." };
+      return { reason: "unknown", message: zh.scanner.cameraStartFailed };
   }
 }
 

@@ -1,3 +1,4 @@
+import { zh } from "@/lib/i18n/zh-cn";
 import {
   SAVED_INQUIRY_DATE_PATTERN,
   SAVED_INQUIRY_MAX_PAGE_SIZE,
@@ -64,28 +65,28 @@ export function parseSavedInquiryListQuery(
   const errors: string[] = [];
   const q = readParam(params, "q");
   if (q.length > SAVED_INQUIRY_MAX_QUERY_LENGTH) {
-    errors.push("Search is too long.");
+    errors.push(zh.errors.searchTooLong);
   }
 
   const from = readParam(params, "from");
   const to = readParam(params, "to");
-  if (from !== "" && !isValidDay(from)) errors.push("From date is not a valid day.");
-  if (to !== "" && !isValidDay(to)) errors.push("To date is not a valid day.");
+  if (from !== "" && !isValidDay(from)) errors.push(zh.errors.fromDateInvalid);
+  if (to !== "" && !isValidDay(to)) errors.push(zh.errors.toDateInvalid);
   if (from !== "" && to !== "" && isValidDay(from) && isValidDay(to) && from > to) {
-    errors.push("From date cannot be after to date.");
+    errors.push(zh.errors.dateOrder);
   }
 
   const page = parsePositiveInt(readParam(params, "page"), 1);
-  if (page === null) errors.push("Page must be a positive whole number.");
+  if (page === null) errors.push(zh.errors.pageInvalid);
 
   const rawPageSize = readParam(params, "pageSize");
   let pageSize = SAVED_INQUIRY_PAGE_SIZE;
   if (rawPageSize !== "") {
     const parsed = parsePositiveInt(rawPageSize, SAVED_INQUIRY_PAGE_SIZE);
     if (parsed === null) {
-      errors.push("Page size must be a positive whole number.");
+      errors.push(zh.errors.pageSizeInvalid);
     } else if (parsed > SAVED_INQUIRY_MAX_PAGE_SIZE) {
-      errors.push(`Page size cannot exceed ${SAVED_INQUIRY_MAX_PAGE_SIZE}.`);
+      errors.push(zh.errors.pageSizeMax(SAVED_INQUIRY_MAX_PAGE_SIZE));
     } else {
       pageSize = parsed;
     }

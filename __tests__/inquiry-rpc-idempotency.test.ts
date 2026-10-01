@@ -33,7 +33,8 @@ const MARKER = "phase2-idempotency-test";
 const createdIds: string[] = [];
 
 describe.skipIf(!live)("create_trade_show_inquiry idempotency against Supabase", () => {
-  const supabase = createClient(url!, secretKey!, {
+  if (!url || !secretKey) return;
+  const supabase = createClient(url, secretKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 

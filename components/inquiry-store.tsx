@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import { DEFAULT_CURRENCY } from "@/lib/format";
+import { zh } from "@/lib/i18n/zh-cn";
 import { canSubmitInquiry, summarizeInquiry, type InquirySummary } from "@/lib/inquiry";
 import type { CustomerDetails, InquiryLine, Product } from "@/lib/types";
 import {
@@ -149,7 +150,7 @@ export function InquiryProvider({ children }: { children: React.ReactNode }) {
       if (locked) {
         return {
           ok: false,
-          reason: "This inquiry has already been saved. Start the next inquiry to add products.",
+          reason: zh.inquiry.alreadySaved,
         };
       }
 
@@ -157,7 +158,7 @@ export function InquiryProvider({ children }: { children: React.ReactNode }) {
       if (existingCurrency && existingCurrency !== product.currency) {
         return {
           ok: false,
-          reason: `This inquiry is priced in ${existingCurrency}. Start a new inquiry before adding a ${product.currency} product.`,
+          reason: zh.inquiry.currencyLocked(existingCurrency, product.currency),
         };
       }
 
@@ -227,15 +228,21 @@ export function InquiryProvider({ children }: { children: React.ReactNode }) {
     { ok: true } | { ok: false; message: string; details: string[] }
   > => {
     if (locked || savingRef.current) {
-      return { ok: false, message: "This inquiry has already been saved.", details: [] };
+      return { ok: false, message: zh.inquiry.alreadySaved, details: [] };
     }
     if (!canSubmitInquiry(lines, customer)) {
       const details = lines
         .filter((line) => line.quotedUnitPrice === null || typeof line.quotedUnitPrice !== "number")
-        .map((line) => `${line.product.code} has no quoted price.`);
+        .map((line) => zh.inquiry.lineQuoteMissing(line.product.code));
+      const message =
+        customer.name.trim() === ""
+          ? zh.validation.customerName
+          : lines.length === 0
+            ? zh.validation.productRequired
+            : zh.validation.quotedPrice;
       return {
         ok: false,
-        message: "Customer name, at least one product and a quoted price on every line are required.",
+        message,
         details,
       };
     }
@@ -292,10 +299,10 @@ export function InquiryProvider({ children }: { children: React.ReactNode }) {
           }
         }
       }
-    } catch (error) {
+    } catch {
       return {
         ok: false,
-        message: error instanceof Error ? error.message : "The inquiry could not be saved on this device.",
+        message: zh.validation.saveFailed,
         details: [],
       };
     } finally {

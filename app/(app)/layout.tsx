@@ -20,7 +20,7 @@ export default async function AppLayout({
   let email: string;
   try {
     const user = await requireAuthenticatedUser();
-    email = user.email ?? "Employee";
+    email = user.email ?? "员工";
   } catch (error) {
     if (error instanceof AuthenticationError) {
       redirect("/login");

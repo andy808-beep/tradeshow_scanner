@@ -1,4 +1,5 @@
 import { ApiError, createInquiryRequest } from "@/lib/api-client";
+import { zh } from "@/lib/i18n/zh-cn";
 import { INQUIRY_SUBMIT_TIMEOUT_MS, SHELL_CACHE_NAME } from "./constants";
 import { offlineDebug } from "./diagnostics";
 import { isOnline } from "./lookup";
@@ -98,28 +99,16 @@ async function submitOne(
     return "synced";
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
-      await markOutboxAwaiting(
-        row.clientSubmissionId,
-        "Sign in while online to synchronize this inquiry.",
-      );
+      await markOutboxAwaiting(row.clientSubmissionId, zh.sync.authFailure);
       return "sign-in";
     }
 
     if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
-      await markOutboxNeedsAttention(
-        row.clientSubmissionId,
-        error.details[0] ?? error.message,
-      );
+      await markOutboxNeedsAttention(row.clientSubmissionId, zh.sync.validationFailure);
       return "attention";
     }
 
-    const message =
-      error instanceof Error && error.name === "AbortError"
-        ? "The network timed out. This inquiry is still on this device."
-        : error instanceof Error
-          ? error.message
-          : "The inquiry could not be synchronized.";
-    await markOutboxAwaiting(row.clientSubmissionId, message);
+    await markOutboxAwaiting(row.clientSubmissionId, zh.sync.failure);
     return "retry";
   } finally {
     clearTimeout(timer);

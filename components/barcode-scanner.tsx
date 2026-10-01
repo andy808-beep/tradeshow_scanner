@@ -14,6 +14,7 @@ import {
   stopMediaStream,
   type CameraErrorInfo,
 } from "@/lib/barcode";
+import { zh } from "@/lib/i18n/zh-cn";
 import { scanProductsLocalFirst } from "@/lib/offline/lookup";
 import type { Product } from "@/lib/types";
 
@@ -50,12 +51,12 @@ interface BarcodeScannerProps {
 }
 
 const STATUS_LABELS: Record<Status["kind"], string> = {
-  starting: "Starting camera…",
-  scanning: "Camera active — point at a barcode",
-  lookingUp: "Looking up product…",
-  notFound: "No match",
-  lookupFailed: "Lookup failed",
-  cameraError: "Camera unavailable",
+  starting: zh.scanner.loadingCamera,
+  scanning: zh.scanner.heading,
+  lookingUp: zh.scanner.loadingProduct,
+  notFound: zh.scanner.productNotFound,
+  lookupFailed: zh.scanner.lookupFailed,
+  cameraError: zh.scanner.cameraUnavailable,
 };
 
 export default function BarcodeScanner({
@@ -137,7 +138,7 @@ export default function BarcodeScanner({
           message:
             error instanceof Error
               ? error.message
-              : "The product database is not available.",
+              : zh.errors.productDataUnavailable,
         });
       }
     },
@@ -296,7 +297,7 @@ export default function BarcodeScanner({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={testing ? "Camera test" : "Barcode scanner"}
+      aria-label={testing ? zh.scanner.cameraTestLabel : zh.scanner.heading}
       className="fixed inset-0 z-50 flex flex-col bg-porcelain-950 text-white"
     >
       <div className="flex items-start justify-between gap-3 p-3">
@@ -305,13 +306,13 @@ export default function BarcodeScanner({
           className="rounded-full bg-black/40 px-3 py-1.5 text-sm font-medium"
         >
           {testing && status.kind === "scanning"
-            ? "Camera works — offline scanning is ready"
+            ? zh.scanner.cameraReady
             : STATUS_LABELS[status.kind]}
         </p>
         <button
           type="button"
           onClick={handleClose}
-          aria-label={testing ? "Close camera test" : "Close scanner"}
+          aria-label={testing ? zh.scanner.closeCameraTest : zh.scanner.close}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-black/40 text-2xl leading-none"
         >
           ×
@@ -323,7 +324,7 @@ export default function BarcodeScanner({
           ref={videoRef}
           playsInline
           muted
-          aria-label="Camera preview"
+          aria-label={zh.scanner.preview}
           className={`h-full w-full object-cover ${showViewfinder ? "" : "invisible"}`}
         />
 
@@ -331,21 +332,17 @@ export default function BarcodeScanner({
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-4">
             <div className="h-44 w-[78%] rounded-2xl border-4 border-white/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]" />
             <p className="px-6 text-center text-sm text-white/90">
-              {testing
-                ? "Close this when you can see the camera picture."
-                : "Hold the barcode inside the frame."}
+              {testing ? zh.scanner.testInstruction : zh.scanner.instruction}
             </p>
           </div>
         )}
 
         {status.kind === "cameraError" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
-            <p className="text-base font-semibold">Camera unavailable</p>
+            <p className="text-base font-semibold">{zh.scanner.cameraUnavailable}</p>
             <p className="text-sm text-white/80">{status.info.message}</p>
             {!testing && (
-              <p className="text-sm text-white/70">
-                You can still type a code below, or close the scanner and use search.
-              </p>
+              <p className="text-sm text-white/70">{zh.scanner.cameraFallback}</p>
             )}
             {status.info.reason !== "unsupported" &&
               status.info.reason !== "noCamera" &&
@@ -355,7 +352,7 @@ export default function BarcodeScanner({
                   onClick={handleRetry}
                   className="mt-1 h-11 rounded-xl bg-white/15 px-5 text-sm font-semibold"
                 >
-                  Try the camera again
+                  {zh.scanner.retryCamera}
                 </button>
               )}
           </div>
@@ -364,8 +361,8 @@ export default function BarcodeScanner({
         {status.kind === "lookingUp" && (
           <div className="absolute inset-0 flex items-center justify-center px-6 text-center">
             <p className="text-sm text-white/85">
-              Looking up{" "}
-              <span className="font-mono break-all">{status.raw}</span>…
+              {zh.scanner.loadingProduct}{" "}
+              <span className="font-mono break-all">{status.raw}</span>
             </p>
           </div>
         )}
@@ -373,9 +370,7 @@ export default function BarcodeScanner({
         {(status.kind === "notFound" || status.kind === "lookupFailed") && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
             <p className="text-base font-semibold">
-              {status.kind === "notFound"
-                ? `No product found for barcode: ${status.raw}`
-                : status.message}
+              {status.kind === "notFound" ? zh.scanner.productNotFound : status.message}
             </p>
             <p className="font-mono text-sm break-all text-white/80">{status.raw}</p>
             <div className="flex gap-2">
@@ -384,14 +379,14 @@ export default function BarcodeScanner({
                 onClick={() => handleCopy(status.raw)}
                 className="h-11 rounded-xl bg-white/15 px-4 text-sm font-semibold"
               >
-                {copied ? "Copied" : "Copy code"}
+                {copied ? zh.scanner.copied : zh.scanner.copyCode}
               </button>
               <button
                 type="button"
                 onClick={handleRetry}
                 className="h-11 rounded-xl bg-white/15 px-4 text-sm font-semibold"
               >
-                Scan again
+                {zh.scanner.scanAgain}
               </button>
             </div>
           </div>
@@ -405,7 +400,7 @@ export default function BarcodeScanner({
           className="space-y-2 border-t border-white/15 bg-porcelain-950/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
         >
           <label htmlFor="manual-code" className="block text-xs text-white/70">
-            Can’t scan? Enter the code or barcode
+            {zh.scanner.manualLabel}
           </label>
           <div className="flex gap-2">
             <input
@@ -413,7 +408,7 @@ export default function BarcodeScanner({
               type="text"
               value={manualValue}
               onChange={(event) => setManualValue(event.target.value)}
-              placeholder="e.g. K10188-13"
+              placeholder={zh.scanner.manualPlaceholder}
               autoComplete="off"
               autoCapitalize="off"
               autoCorrect="off"
@@ -425,12 +420,12 @@ export default function BarcodeScanner({
               disabled={manualValue.trim() === ""}
               className="h-12 shrink-0 rounded-xl bg-white px-5 text-base font-semibold text-porcelain-900 disabled:bg-white/30 disabled:text-white/60"
             >
-              Find
+              {zh.scanner.find}
             </button>
           </div>
           {rawValue !== null && status.kind !== "lookingUp" && (
             <p className="text-xs text-white/60">
-              Scanned value kept exactly as decoded.
+              {zh.scanner.scannedKept}
             </p>
           )}
         </form>

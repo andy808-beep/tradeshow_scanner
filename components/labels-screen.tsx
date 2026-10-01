@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { listLabelProductsRequest } from "@/lib/api-client";
+import { zh } from "@/lib/i18n/zh-cn";
 import { describeCode39Error, isCode39Compatible } from "@/lib/code39";
 import {
   DEFAULT_LABEL_LAYOUT,
@@ -62,7 +63,7 @@ export default function LabelsScreen() {
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
         setLoadError(
-          error instanceof Error ? error.message : "The product database is not available.",
+          zh.errors.productDataUnavailable,
         );
       })
       .finally(() => setLoading(false));
@@ -93,7 +94,7 @@ export default function LabelsScreen() {
     try {
       const fontResponse = await fetch(LABEL_PDF_FONT_PUBLIC_PATH);
       if (!fontResponse.ok) {
-        throw new Error("Could not load the Chinese label font.");
+        throw new Error(zh.labels.pdfFailed);
       }
       const fontBytes = new Uint8Array(await fontResponse.arrayBuffer());
       const { generateCalibrationLabelPdf, generateProductionLabelPdf } =
@@ -115,12 +116,10 @@ export default function LabelsScreen() {
       }
       downloadPdfBytes(
         result.bytes,
-        mode === "calibration" ? "koei-label-calibration.pdf" : "koei-labels.pdf",
+        mode === "calibration" ? zh.labels.calibrationFile : zh.labels.productionFile,
       );
-    } catch (error: unknown) {
-      setPdfError(
-        error instanceof Error ? error.message : "The PDF could not be generated.",
-      );
+    } catch {
+      setPdfError(zh.labels.pdfFailed);
     } finally {
       setPdfBusy(null);
     }
@@ -130,25 +129,22 @@ export default function LabelsScreen() {
     <div className="space-y-4">
       <div className="print-controls space-y-4">
         <OnlineOnlyNotice>
-          Label printing and PDF export need a network connection in this version.
+          {zh.labels.onlineRequired}
         </OnlineOnlyNotice>
         <div>
-          <h1 className="text-xl font-semibold text-porcelain-950">Barcode labels</h1>
-          <p className="mt-1 text-sm text-porcelain-600">
-            Code 39, encoded from the product code. Nothing is written back to the
-            catalogue.
-          </p>
+          <h1 className="text-xl font-semibold text-porcelain-950">{zh.labels.heading}</h1>
+          <p className="mt-1 text-sm text-porcelain-600">{zh.labels.description}</p>
         </div>
 
         <label htmlFor="label-search" className="sr-only">
-          Search products to print
+          {zh.labels.searchLabel}
         </label>
         <input
           id="label-search"
           type="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Product code or name"
+          placeholder={zh.labels.searchPlaceholder}
           autoComplete="off"
           className="w-full rounded-xl border border-porcelain-300 bg-white px-3.5 py-3 text-base text-porcelain-950 placeholder:text-porcelain-400 focus:border-porcelain-500 focus:ring-2 focus:ring-porcelain-200 focus:outline-none"
         />
@@ -160,7 +156,7 @@ export default function LabelsScreen() {
             disabled={results.length === 0 || allResultsSelected}
             className="flex-1 rounded-xl border border-porcelain-300 px-3 py-2.5 text-sm font-semibold text-porcelain-700 disabled:text-porcelain-300"
           >
-            Select all search results
+            {zh.labels.selectAll}
           </button>
           <button
             type="button"
@@ -168,20 +164,20 @@ export default function LabelsScreen() {
             disabled={selected.length === 0}
             className="rounded-xl border border-porcelain-300 px-3 py-2.5 text-sm font-semibold text-porcelain-700 disabled:text-porcelain-300"
           >
-            Clear
+            {zh.labels.clearSelection}
           </button>
         </div>
 
         <div aria-live="polite">
-          {loading && <p className="text-sm text-porcelain-500">Loading products…</p>}
+          {loading && <p className="text-sm text-porcelain-500">{zh.labels.loading}</p>}
           {loadError && (
             <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-              <p className="font-semibold">Database unavailable</p>
+              <p className="font-semibold">{zh.sync.catalogueUnavailable}</p>
               <p className="mt-1">{loadError}</p>
             </div>
           )}
           {!loading && !loadError && results.length === 0 && (
-            <p className="text-sm text-porcelain-500">No matching products.</p>
+            <p className="text-sm text-porcelain-500">{zh.labels.noMatches}</p>
           )}
         </div>
 
@@ -197,7 +193,7 @@ export default function LabelsScreen() {
                     checked={checked}
                     onChange={() => setSelected(toggleSelection(selected, product))}
                     className="mt-1 h-4 w-4"
-                    aria-label={`Select ${product.code}`}
+                    aria-label={zh.product.selectAria(product.code)}
                   />
                   <span className="min-w-0 flex-1">
                     <span className="block font-mono text-xs font-semibold text-porcelain-600">
@@ -225,10 +221,10 @@ export default function LabelsScreen() {
                 id="copies-heading"
                 className="text-sm font-semibold tracking-wide text-porcelain-600 uppercase"
               >
-                Copies per product
+                {zh.labels.copiesPerProduct}
               </h2>
               <p className="shrink-0 text-xs text-porcelain-500">
-                {selected.length} {selected.length === 1 ? "product" : "products"}
+                {selected.length} 款产品
               </p>
             </div>
             <ul
@@ -250,7 +246,7 @@ export default function LabelsScreen() {
                     </span>
                   </span>
                   <label className="flex shrink-0 items-center gap-2 text-sm text-porcelain-600">
-                    Copies
+                    {zh.labels.copies}
                     <input
                       type="number"
                       min={1}
@@ -261,7 +257,7 @@ export default function LabelsScreen() {
                           setCopies(selected, item.product.id, Number(event.target.value)),
                         )
                       }
-                      aria-label={`Copies of ${item.product.code}`}
+                      aria-label={zh.product.copiesAria(item.product.code)}
                       className="h-10 w-16 rounded-lg border border-porcelain-300 bg-white px-2 text-right text-sm font-semibold"
                     />
                   </label>
@@ -273,65 +269,56 @@ export default function LabelsScreen() {
 
         {invalidSelected.length > 0 && (
           <p className="text-sm font-medium text-red-700">
-            {invalidSelected.length}{" "}
-            {invalidSelected.length === 1 ? "code cannot" : "codes cannot"} be encoded
-            as Code 39 and will not print.
+            {zh.labels.incompatible(invalidSelected.length)}
           </p>
         )}
 
         <section className="space-y-3 rounded-xl border border-porcelain-200 bg-white p-3">
           <h2 className="text-sm font-semibold tracking-wide text-porcelain-600 uppercase">
-            PDF export
+            {zh.labels.exportPdf}
           </h2>
-          <p className="text-xs text-porcelain-500">
-            Print-ready A4 PDF, 4 columns × 10 rows. Template size is fixed to
-            the sticker sheet; offsets are for printer calibration and have not
-            been measured on the physical product yet.
-          </p>
+          <p className="text-xs text-porcelain-500">{zh.labels.pdfIntro}</p>
           <p className="text-sm font-medium text-porcelain-900">{A4_40_LABELS_52x29.name}</p>
-          <p className="text-xs text-porcelain-500">
-            Start at label accepts positions 1–40, counted left to right then top
-            to bottom. Earlier positions on the first sheet stay blank.
-          </p>
+          <p className="text-xs text-porcelain-500">{zh.labels.startHint}</p>
           <div className="grid grid-cols-2 gap-3">
             <LayoutField
               id="pdf-start-at"
-              label="Start at label"
+              label={zh.labels.startAt}
               value={pdfSettings.startAt}
               bounds={LABEL_PDF_BOUNDS.startAt}
               onChange={(startAt) => patchPdf({ startAt })}
             />
             <LayoutField
               id="pdf-offset-x"
-              label="Horizontal offset (mm)"
+              label={zh.labels.offsetXMm}
               value={pdfSettings.offsetXMm}
               bounds={LABEL_PDF_BOUNDS.offsetXMm}
               onChange={(offsetXMm) => patchPdf({ offsetXMm })}
             />
             <LayoutField
               id="pdf-offset-y"
-              label="Vertical offset (mm)"
+              label={zh.labels.offsetYMm}
               value={pdfSettings.offsetYMm}
               bounds={LABEL_PDF_BOUNDS.offsetYMm}
               onChange={(offsetYMm) => patchPdf({ offsetYMm })}
             />
             <LayoutField
               id="pdf-padding"
-              label="Internal padding (mm)"
+              label={zh.labels.paddingMm}
               value={pdfSettings.paddingMm}
               bounds={LABEL_PDF_BOUNDS.paddingMm}
               onChange={(paddingMm) => patchPdf({ paddingMm })}
             />
             <LayoutField
               id="pdf-barcode-height"
-              label="Barcode height (mm)"
+              label={zh.labels.barcodeHeightMm}
               value={pdfSettings.barcodeHeightMm}
               bounds={LABEL_PDF_BOUNDS.barcodeHeightMm}
               onChange={(barcodeHeightMm) => patchPdf({ barcodeHeightMm })}
             />
             <LayoutField
               id="pdf-module"
-              label="Barcode width (mm)"
+              label={zh.labels.barcodeWidthMm}
               value={pdfSettings.moduleMm}
               bounds={LABEL_PDF_BOUNDS.moduleMm}
               onChange={(moduleMm) => patchPdf({ moduleMm })}
@@ -339,7 +326,7 @@ export default function LabelsScreen() {
           </div>
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
             <h3 className="text-xs font-semibold tracking-wide text-amber-900 uppercase">
-              Print at 100% before download
+              {zh.labels.printInstructions}
             </h3>
             <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs text-amber-950">
               {LABEL_PDF_PRINT_INSTRUCTIONS.map((instruction) => (
@@ -357,7 +344,7 @@ export default function LabelsScreen() {
               disabled={pdfProducts.length === 0 || pdfBusy !== null}
               className="flex-1 rounded-xl bg-porcelain-600 px-4 py-3 text-sm font-semibold text-white disabled:bg-porcelain-300"
             >
-              {pdfBusy === "production" ? "Generating PDF…" : "Export PDF"}
+              {pdfBusy === "production" ? zh.labels.generatingPdf : zh.labels.exportPdf}
             </button>
             <button
               type="button"
@@ -367,7 +354,7 @@ export default function LabelsScreen() {
               disabled={pdfBusy !== null}
               className="flex-1 rounded-xl border border-porcelain-300 px-4 py-3 text-sm font-semibold text-porcelain-700 disabled:text-porcelain-300"
             >
-              {pdfBusy === "calibration" ? "Generating…" : "Calibration PDF"}
+              {pdfBusy === "calibration" ? zh.labels.generatingPdf : zh.labels.calibrationPdf}
             </button>
           </div>
         </section>

@@ -1,3 +1,4 @@
+import { zh } from "@/lib/i18n/zh-cn";
 import { encodeCode39, QUIET_ZONE_MODULES, totalModules } from "./code39";
 
 export interface Code39BarRect {
@@ -97,5 +98,5 @@ export function fitCode39ForLabel(
 }
 
 export function describeUnsafeBarcode(code: string, minModuleMm = MIN_NARROW_BAR_MM): string {
-  return `Cannot print “${code}” on this label size without shrinking the narrow bar below ${minModuleMm} mm.`;
+  return zh.labels.unsafeBarcode(code, minModuleMm);
 }

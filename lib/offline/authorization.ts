@@ -1,3 +1,4 @@
+import { formatZhDateTime } from "@/lib/format";
 import { OFFLINE_AUTH_TTL_MS } from "./constants";
 
 export interface CatalogueMeta {
@@ -37,16 +38,12 @@ export function inspectCatalogueAccess(
   return { kind: "ready", meta, expiresAt };
 }
 
-export function formatSyncTime(timestamp: number, locale?: string): string {
-  return new Date(timestamp).toLocaleString(locale, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+export function formatSyncTime(timestamp: number, locale = "zh-CN"): string {
+  void locale;
+  return formatZhDateTime(timestamp);
 }
 
-export function formatExpiryDate(timestamp: number, locale?: string): string {
-  return new Date(timestamp).toLocaleString(locale, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+export function formatExpiryDate(timestamp: number, locale = "zh-CN"): string {
+  void locale;
+  return formatZhDateTime(timestamp);
 }

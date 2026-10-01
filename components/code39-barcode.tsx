@@ -1,5 +1,6 @@
 "use client";
 
+import { zh } from "@/lib/i18n/zh-cn";
 import { isCode39Compatible } from "@/lib/code39";
 import { code39BarRects } from "@/lib/code39-bars";
 
@@ -21,7 +22,7 @@ export default function Code39Barcode({
   return (
     <svg
       role="img"
-      aria-label={`Code 39 barcode ${value}`}
+      aria-label={zh.labels.barcodeAria(value)}
       data-encoded-value={value}
       data-barcode-format="CODE39"
       width={`${width}mm`}

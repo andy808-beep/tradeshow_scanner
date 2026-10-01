@@ -67,7 +67,7 @@ function renderApp(ui: ReactNode) {
 }
 
 function typeQuery(value: string) {
-  fireEvent.change(screen.getByLabelText(/Search by product/), {
+  fireEvent.change(screen.getByLabelText(/搜索产品/), {
     target: { value },
   });
 }
@@ -94,9 +94,9 @@ describe("a rejected IndexedDB read is visible, not swallowed", () => {
 
     renderApp(<SearchPanel />);
 
-    expect(await screen.findByText("Offline catalogue unavailable")).toBeVisible();
+    expect(await screen.findByText("暂无可用的产品资料")).toBeVisible();
     expect(screen.getByText(LOOKUP_MESSAGES.localUnavailable)).toBeVisible();
-    expect(screen.queryByText("Searching…")).toBeNull();
+    expect(screen.queryByText("正在搜索……")).toBeNull();
   });
 });
 
@@ -112,9 +112,9 @@ describe("sync metadata without stored rows", () => {
     renderApp(<SearchPanel />);
     typeQuery("K10188-13");
 
-    expect(await screen.findByText("Catalogue not synchronized")).toBeVisible();
+    expect(await screen.findByText("尚未同步产品资料")).toBeVisible();
     expect(await screen.findByText(LOOKUP_MESSAGES.unsynced)).toBeVisible();
-    expect(screen.queryByText("Searching…")).toBeNull();
+    expect(screen.queryByText("正在搜索……")).toBeNull();
   });
 });
 

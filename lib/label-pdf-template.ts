@@ -1,3 +1,5 @@
+import { zh } from "@/lib/i18n/zh-cn";
+
 /**
  * Physical A4 sticker layout. Zero margins and gaps are initial assumptions —
  * the sheet has not been printer-calibrated yet.
@@ -35,7 +37,7 @@ export interface LabelPdfTemplate {
 
 export const A4_40_LABELS_52x29: LabelPdfTemplate = {
   id: "a4-40-52x29",
-  name: "A4 — 40 labels — 52.5 × 29.7 mm",
+  name: zh.labels.templateName,
   pageWidthMm: 210,
   pageHeightMm: 297,
   columns: 4,
@@ -243,13 +245,7 @@ export function paginateLabelSlots<T>(
   return pages;
 }
 
-export const LABEL_PDF_PRINT_INSTRUCTIONS = [
-  "Load the A4 sticker sheet in the printer’s recommended label-paper tray",
-  "Select A4 portrait",
-  "Print at 100% / Actual size",
-  "Disable Fit to page, Scale to fit and borderless enlargement",
-  "First print the calibration PDF on ordinary A4 paper",
-] as const;
+export const LABEL_PDF_PRINT_INSTRUCTIONS = zh.labels.instructions;
 
 export const LABEL_PDF_FONT_PUBLIC_PATH = "/fonts/NotoSansSC-Regular.ttf";
 export const LABEL_PDF_FONT_DISK_PATH = "public/fonts/NotoSansSC-Regular.ttf";

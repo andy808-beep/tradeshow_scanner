@@ -16,6 +16,7 @@ import {
   LABEL_PDF_BOUNDS,
   LABEL_PDF_FONT_PUBLIC_PATH,
   LABEL_PDF_PRINT_INSTRUCTIONS,
+  safeInsetsMm,
   toLabelPdfProduct,
   type LabelPdfSettings,
 } from "@/lib/label-pdf-template";
@@ -52,6 +53,7 @@ export default function LabelsScreen() {
   const [pdfSettings, setPdfSettings] = useState<LabelPdfSettings>(DEFAULT_LABEL_PDF_SETTINGS);
   const [pdfBusy, setPdfBusy] = useState<"production" | "calibration" | null>(null);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -280,49 +282,55 @@ export default function LabelsScreen() {
           <p className="text-xs text-porcelain-500">{zh.labels.pdfIntro}</p>
           <p className="text-sm font-medium text-porcelain-900">{A4_40_LABELS_52x29.name}</p>
           <p className="text-xs text-porcelain-500">{zh.labels.startHint}</p>
-          <div className="grid grid-cols-2 gap-3">
-            <LayoutField
-              id="pdf-start-at"
-              label={zh.labels.startAt}
-              value={pdfSettings.startAt}
-              bounds={LABEL_PDF_BOUNDS.startAt}
-              onChange={(startAt) => patchPdf({ startAt })}
-            />
-            <LayoutField
-              id="pdf-offset-x"
-              label={zh.labels.offsetXMm}
-              value={pdfSettings.offsetXMm}
-              bounds={LABEL_PDF_BOUNDS.offsetXMm}
-              onChange={(offsetXMm) => patchPdf({ offsetXMm })}
-            />
-            <LayoutField
-              id="pdf-offset-y"
-              label={zh.labels.offsetYMm}
-              value={pdfSettings.offsetYMm}
-              bounds={LABEL_PDF_BOUNDS.offsetYMm}
-              onChange={(offsetYMm) => patchPdf({ offsetYMm })}
-            />
-            <LayoutField
-              id="pdf-padding"
-              label={zh.labels.paddingMm}
-              value={pdfSettings.paddingMm}
-              bounds={LABEL_PDF_BOUNDS.paddingMm}
-              onChange={(paddingMm) => patchPdf({ paddingMm })}
-            />
-            <LayoutField
-              id="pdf-barcode-height"
-              label={zh.labels.barcodeHeightMm}
-              value={pdfSettings.barcodeHeightMm}
-              bounds={LABEL_PDF_BOUNDS.barcodeHeightMm}
-              onChange={(barcodeHeightMm) => patchPdf({ barcodeHeightMm })}
-            />
-            <LayoutField
-              id="pdf-module"
-              label={zh.labels.barcodeWidthMm}
-              value={pdfSettings.moduleMm}
-              bounds={LABEL_PDF_BOUNDS.moduleMm}
-              onChange={(moduleMm) => patchPdf({ moduleMm })}
-            />
+          <LayoutField
+            id="pdf-start-at"
+            label={zh.labels.startAt}
+            value={pdfSettings.startAt}
+            bounds={LABEL_PDF_BOUNDS.startAt}
+            onChange={(startAt) => patchPdf({ startAt })}
+          />
+          <PrinterSafeFields settings={pdfSettings} onChange={patchPdf} />
+          <div>
+            <button
+              type="button"
+              aria-expanded={showAdvanced}
+              onClick={() => setShowAdvanced((open) => !open)}
+              className="text-sm font-semibold text-porcelain-700"
+            >
+              {zh.labels.advancedCalibration}
+            </button>
+            {showAdvanced && (
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <LayoutField
+                  id="pdf-offset-x"
+                  label={zh.labels.offsetXMm}
+                  value={pdfSettings.offsetXMm}
+                  bounds={LABEL_PDF_BOUNDS.offsetXMm}
+                  onChange={(offsetXMm) => patchPdf({ offsetXMm })}
+                />
+                <LayoutField
+                  id="pdf-offset-y"
+                  label={zh.labels.offsetYMm}
+                  value={pdfSettings.offsetYMm}
+                  bounds={LABEL_PDF_BOUNDS.offsetYMm}
+                  onChange={(offsetYMm) => patchPdf({ offsetYMm })}
+                />
+                <LayoutField
+                  id="pdf-barcode-height"
+                  label={zh.labels.barcodeHeightMm}
+                  value={pdfSettings.barcodeHeightMm}
+                  bounds={LABEL_PDF_BOUNDS.barcodeHeightMm}
+                  onChange={(barcodeHeightMm) => patchPdf({ barcodeHeightMm })}
+                />
+                <LayoutField
+                  id="pdf-module"
+                  label={zh.labels.barcodeWidthMm}
+                  value={pdfSettings.moduleMm}
+                  bounds={LABEL_PDF_BOUNDS.moduleMm}
+                  onChange={(moduleMm) => patchPdf({ moduleMm })}
+                />
+              </div>
+            )}
           </div>
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
             <h3 className="text-xs font-semibold tracking-wide text-amber-900 uppercase">
@@ -361,6 +369,52 @@ export default function LabelsScreen() {
       </div>
 
       <LabelSheet products={printable} layout={DEFAULT_LABEL_LAYOUT} />
+    </div>
+  );
+}
+
+function formatMm(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+function PrinterSafeFields({
+  settings,
+  onChange,
+}: {
+  settings: LabelPdfSettings;
+  onChange: (patch: Partial<LabelPdfSettings>) => void;
+}) {
+  const insets = safeInsetsMm(settings);
+  return (
+    <div className="space-y-2">
+      <h3 className="text-sm font-semibold text-porcelain-800">{zh.labels.safeMarginHeading}</h3>
+      <p className="text-xs text-porcelain-500">
+        {zh.labels.safeMarginHint(
+          formatMm(insets.leftMm),
+          formatMm(insets.topMm),
+          formatMm(insets.bottomMm),
+        )}
+      </p>
+      <div className="grid grid-cols-2 gap-3">
+        <LayoutField
+          id="pdf-safe-x"
+          label={zh.labels.safeInsetXMm}
+          value={settings.safeInsetXMm}
+          bounds={LABEL_PDF_BOUNDS.safeInsetXMm}
+          onChange={(safeInsetXMm) => onChange({ safeInsetXMm })}
+        />
+        <div>
+          <LayoutField
+            id="pdf-safe-y"
+            label={zh.labels.safeInsetYMm}
+            value={settings.safeInsetYMm}
+            bounds={LABEL_PDF_BOUNDS.safeInsetYMm}
+            onChange={(safeInsetYMm) => onChange({ safeInsetYMm })}
+          />
+          <p className="mt-1 text-xs text-porcelain-500">{zh.labels.safeInsetYHelp}</p>
+        </div>
+      </div>
     </div>
   );
 }

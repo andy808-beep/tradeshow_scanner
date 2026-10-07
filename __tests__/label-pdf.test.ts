@@ -23,7 +23,9 @@ import {
   CALIBRATION_LONG_CODE,
   CALIBRATION_PDF_SUBJECT,
   CALIBRATION_TEST_CODE,
+  calibrationSafeOutlinePositions,
   clampPdfSettings,
+  contentSafeRectMm,
   DEFAULT_LABEL_PDF_SETTINGS,
   LABEL_PDF_FONT_DISK_PATH,
   LABEL_PDF_TEMPLATE,
@@ -34,8 +36,10 @@ import {
   paginateLabelSlots,
   parseStartAt,
   PRODUCTION_PDF_SUBJECT,
+  safeInsetsMm,
   toLabelPdfProduct,
   type LabelPdfProduct,
+  type LabelPdfSettings,
 } from "@/lib/label-pdf-template";
 import type { Product } from "@/lib/types";
 
@@ -104,6 +108,25 @@ function assertInsideLabel(slot: LabelSlotReport) {
     expect(box.yMmFromTop).toBeGreaterThanOrEqual(slot.rect.yMmFromTop - 0.05);
     expect(box.yMmFromTop + box.heightMm).toBeLessThanOrEqual(
       slot.rect.yMmFromTop + slot.rect.heightMm + 0.05,
+    );
+  }
+}
+
+function assertInsideSafeArea(slot: LabelSlotReport, settings: LabelPdfSettings) {
+  const safe = contentSafeRectMm(slot.rect, settings);
+  for (const box of slot.boxes) {
+    if (box.kind === "safe-outline") {
+      expect(box.xMm).toBeCloseTo(safe.xMm);
+      expect(box.yMmFromTop).toBeCloseTo(safe.yMmFromTop);
+      expect(box.widthMm).toBeCloseTo(safe.widthMm);
+      expect(box.heightMm).toBeCloseTo(safe.heightMm);
+      continue;
+    }
+    expect(box.xMm).toBeGreaterThanOrEqual(safe.xMm - 0.05);
+    expect(box.xMm + box.widthMm).toBeLessThanOrEqual(safe.xMm + safe.widthMm + 0.05);
+    expect(box.yMmFromTop).toBeGreaterThanOrEqual(safe.yMmFromTop - 0.05);
+    expect(box.yMmFromTop + box.heightMm).toBeLessThanOrEqual(
+      safe.yMmFromTop + safe.heightMm + 0.05,
     );
   }
 }
@@ -191,22 +214,53 @@ describe("A4 40-up template", () => {
     }
   });
 
-  it("clamps offsets, padding and barcode size without silently accepting a bad start-at", () => {
+  it("clamps offsets, safe insets and barcode size without silently accepting a bad start-at", () => {
     const clamped = clampPdfSettings({
       offsetXMm: -40,
       offsetYMm: 40,
-      paddingMm: 0,
+      safeInsetXMm: 0,
+      safeInsetYMm: 99,
       barcodeHeightMm: 1,
       moduleMm: 9,
       startAt: 99,
     });
     expect(clamped.offsetXMm).toBe(-10);
     expect(clamped.offsetYMm).toBe(10);
-    expect(clamped.paddingMm).toBe(2);
+    expect(clamped.safeInsetXMm).toBe(4);
+    expect(clamped.safeInsetYMm).toBe(6);
     expect(clamped.barcodeHeightMm).toBe(10);
     expect(clamped.moduleMm).toBe(0.5);
     expect(clamped.startAt).toBe(99);
     expect(() => parseStartAt(99)).toThrow(LabelPdfError);
+  });
+
+  it("defaults the safe area to 4 mm sides, 3 mm top and 4 mm bottom", () => {
+    expect(DEFAULT_LABEL_PDF_SETTINGS.safeInsetXMm).toBe(4);
+    expect(DEFAULT_LABEL_PDF_SETTINGS.safeInsetYMm).toBe(4);
+    expect(safeInsetsMm(DEFAULT_LABEL_PDF_SETTINGS)).toEqual({
+      leftMm: 4,
+      rightMm: 4,
+      topMm: 3,
+      bottomMm: 4,
+    });
+    expect(safeInsetsMm({ safeInsetXMm: 4.2, safeInsetYMm: 5 })).toEqual({
+      leftMm: 4.2,
+      rightMm: 4.2,
+      topMm: 4,
+      bottomMm: 5,
+    });
+    expect(calibrationSafeOutlinePositions()).toEqual([1, 4, 37, 40]);
+  });
+
+  it("does not move sticker cells when the safe inset changes", () => {
+    const wider = { ...DEFAULT_LABEL_PDF_SETTINGS, safeInsetXMm: 4.2, safeInsetYMm: 5 };
+    for (let position = 1; position <= 40; position += 1) {
+      const base = labelRectMm(position, DEFAULT_LABEL_PDF_SETTINGS);
+      const moved = labelRectMm(position, wider);
+      expect(moved).toEqual(base);
+      expect(moved.widthMm).toBe(52.5);
+      expect(moved.heightMm).toBeCloseTo(29.7);
+    }
   });
 });
 
@@ -276,7 +330,7 @@ describe("scanner-safety fit", () => {
 
   it("refuses to shrink a 10-character code below the safe minimum", () => {
     const tooLong = "K10188-130";
-    const available = barcodeAvailableWidthMm();
+    const available = barcodeAvailableWidthMm(tooLong);
     const fit = fitCode39ForLabel(tooLong, available, 0.25, MIN_NARROW_BAR_MM);
     expect(fit.ok).toBe(false);
     if (fit.ok) return;
@@ -423,7 +477,89 @@ describe("production PDF", () => {
     });
     for (const slot of plan.slots) {
       assertInsideLabel(slot);
+      assertInsideSafeArea(slot, {
+        ...DEFAULT_LABEL_PDF_SETTINGS,
+        moduleMm: 0.5,
+        barcodeHeightMm: 13,
+      });
       if (slot.productCode) assertBarcodeSafety(slot);
+    }
+  });
+
+  it("keeps first-column and last-row ink inside the safe area on an unchanged grid", async () => {
+    const settings = DEFAULT_LABEL_PDF_SETTINGS;
+    const insets = safeInsetsMm(settings);
+    const { bytes, plan } = await generateProductionLabelPdf({
+      products: Array.from({ length: 40 }, () => toLabelPdfProduct(K10188)),
+      settings,
+      fontBytes: FONT_BYTES,
+    });
+
+    const pdf = await PDFDocument.load(bytes);
+    expect(pdf.getPageCount()).toBe(1);
+    const size = pdf.getPages()[0].getSize();
+    expect(size.width).toBe(mmToPt(210));
+    expect(size.height).toBe(mmToPt(297));
+    expect(size.height).toBeGreaterThan(size.width);
+    expect(plan.slots).toHaveLength(40);
+
+    for (const slot of plan.slots) {
+      expect(slot.rect.widthMm).toBe(52.5);
+      expect(slot.rect.heightMm).toBeCloseTo(29.7);
+      const grid = labelRectMm(slot.position, settings);
+      expect(slot.rect.xMm).toBeCloseTo(grid.xMm);
+      expect(slot.rect.yMmFromTop).toBeCloseTo(grid.yMmFromTop);
+      assertInsideLabel(slot);
+      assertInsideSafeArea(slot, settings);
+      expect(slot.productCode).toBe("K10188-13");
+      assertBarcodeSafety(slot);
+
+      const column = (slot.position - 1) % 4;
+      if (column === 0) {
+        for (const box of slot.boxes) {
+          expect(box.xMm).toBeGreaterThanOrEqual(slot.rect.xMm + insets.leftMm - 0.05);
+        }
+      }
+      if (column === 3) {
+        for (const box of slot.boxes) {
+          expect(box.xMm + box.widthMm).toBeLessThanOrEqual(
+            slot.rect.xMm + slot.rect.widthMm - insets.rightMm + 0.05,
+          );
+        }
+      }
+      if (slot.position <= 4) {
+        for (const box of slot.boxes) {
+          expect(box.yMmFromTop).toBeGreaterThanOrEqual(slot.rect.yMmFromTop + insets.topMm - 0.05);
+        }
+      }
+      if (slot.position >= 37) {
+        const dimensions = slot.boxes.find((box) => box.text === K10188.dimensions);
+        expect(dimensions).toBeTruthy();
+        const glyphBottom = dimensions!.yMmFromTop + dimensions!.heightMm;
+        const labelBottom = slot.rect.yMmFromTop + slot.rect.heightMm;
+        expect(labelBottom - glyphBottom).toBeGreaterThanOrEqual(insets.bottomMm - 0.05);
+      }
+    }
+  });
+
+  it("changes content insets without moving the 52.5 × 29.7 mm cells", async () => {
+    const settings = { ...DEFAULT_LABEL_PDF_SETTINGS, safeInsetXMm: 4.2, safeInsetYMm: 5 };
+    const insets = safeInsetsMm(settings);
+    expect(insets.topMm).toBe(4);
+    expect(insets.bottomMm).toBe(5);
+    const { plan } = await generateProductionLabelPdf({
+      products: [toLabelPdfProduct(K10188)],
+      settings,
+      fontBytes: FONT_BYTES,
+    });
+    const filled = plan.slots.find((slot) => slot.productCode === "K10188-13");
+    expect(filled).toBeTruthy();
+    expect(filled!.rect).toEqual(labelRectMm(1, DEFAULT_LABEL_PDF_SETTINGS));
+    expect(filled!.rect.widthMm).toBe(52.5);
+    expect(filled!.rect.heightMm).toBeCloseTo(29.7);
+    assertInsideSafeArea(filled!, settings);
+    for (const slot of plan.slots) {
+      expect(slot.rect).toEqual(labelRectMm(slot.position, DEFAULT_LABEL_PDF_SETTINGS));
     }
   });
 
@@ -472,10 +608,22 @@ describe("calibration PDF", () => {
       height: mmToPt(297),
     });
 
-    expect(plan.markTexts.some((text) => text.includes("校准页"))).toBe(true);
+    const notes = plan.markTexts.join("");
+    expect(notes).toContain("校准页");
+    expect(notes).toContain("非无边距");
+    expect(notes).toContain("安全框");
+    expect(notes).toContain("100%");
+    expect(notes).toContain("实际大小");
+    expect(notes).toContain("A4 纵向");
+    expect(notes).toContain("适合页面");
+    expect(notes).toContain("适合可打印区域");
     expect(plan.markTexts).toContain("10 mm");
     expect(plan.markTexts).toContain("210 mm");
     expect(plan.markTexts).toContain("297 mm");
+    const outlined = plan.slots.filter((slot) =>
+      slot.boxes.some((box) => box.kind === "safe-outline"),
+    );
+    expect(outlined.map((slot) => slot.position)).toEqual([1, 4, 37, 40]);
     expect(
       plan.slots.every((slot) => slot.boxes.some((box) => box.text === String(slot.position))),
     ).toBe(true);
@@ -485,7 +633,10 @@ describe("calibration PDF", () => {
     assertBarcodeSafety(plan.slots[0]);
     assertBarcodeSafety(plan.slots[1]);
 
-    for (const slot of plan.slots) assertInsideLabel(slot);
+    for (const slot of plan.slots) {
+      assertInsideLabel(slot);
+      assertInsideSafeArea(slot, DEFAULT_LABEL_PDF_SETTINGS);
+    }
   });
 
   it("does not leak calibration markings into a production export", async () => {

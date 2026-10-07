@@ -117,11 +117,26 @@ describe("PDF export layout", () => {
     expect(screen.getByLabelText("从第几个标签开始")).toHaveAttribute("min", "1");
     expect(screen.getByText(/1–40/i)).toBeVisible();
     expect(screen.getByLabelText("从第几个标签开始")).toBeVisible();
-    expect(screen.getByLabelText("水平偏移（mm）")).toBeVisible();
-    expect(screen.getByLabelText("垂直偏移（mm）")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "打印机安全边距" })).toBeVisible();
+    expect(screen.getByLabelText("水平内容边距（mm）")).toHaveValue(4);
+    expect(screen.getByLabelText("垂直内容边距（mm）")).toHaveValue(4);
+    expect(screen.getByText(/上 3 mm/)).toBeVisible();
+    expect(screen.getByText(/下 4 mm/)).toBeVisible();
+    expect(screen.getByText(/不改变贴纸网格/)).toBeVisible();
+    expect(screen.queryByLabelText("水平偏移（mm）")).toBeNull();
+    expect(screen.queryByLabelText("垂直偏移（mm）")).toBeNull();
+    expect(screen.queryByLabelText("内边距（mm）")).toBeNull();
     expect(screen.getByText(/将 A4 标签纸放入打印机推荐的标签纸盒/)).toBeVisible();
+    expect(screen.getByText(/不要使用“适合页面”或“适合可打印区域”/)).toBeVisible();
     expect(screen.getByText(/按 100% \/ 实际大小打印/)).toBeVisible();
     expect(screen.getByText(/请先用普通 A4 纸打印校准 PDF/)).toBeVisible();
+
+    await act(async () => {
+      screen.getByRole("button", { name: "高级校准" }).click();
+    });
+    expect(screen.getByLabelText("水平偏移（mm）")).toBeVisible();
+    expect(screen.getByLabelText("垂直偏移（mm）")).toBeVisible();
+    expect(screen.getByLabelText("条码高度（mm）")).toBeVisible();
   });
 });
 

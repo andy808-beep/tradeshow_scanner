@@ -1,17 +1,32 @@
-import { describe, expect, it } from "vitest";
+import * as nodeFs from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import XLSX from "xlsx";
 import {
+  AUTUMN_BATCH,
+  autumnAudit,
   buildImportPlan,
+  checkAutumnAudit,
   checkExpectations,
+  codeCounts,
   CURRENCY,
+  dimensionToken,
   EXPECTED,
   errorsCsv,
   formatDimensions,
+  isWorkbookName,
+  listWorkbookFiles,
   normalizeProductCode,
+  originFromWorkbookPath,
   parseDimension,
   parsePrice,
   previewCsv,
   PROTECTED_PRODUCT_CODES,
+  readWorkbookRows,
   roundTo,
+  runProductImport,
   SOURCE_BATCH,
   SOURCE_COLUMNS,
   toCsv,
@@ -365,5 +380,192 @@ describe("CSV reports", () => {
     expect(csv.split("\r\n")).toHaveLength(4); // header + 2 rows + trailing
     expect(csv).toContain("K9340-23");
     expect(csv).toContain("Duplicate product code");
+  });
+});
+
+describe("autumn workbook rules", () => {
+  const tempDirs: string[] = [];
+
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  });
+
+  function yixingFile(file: string, data: Array<Record<string, unknown>>) {
+    XLSX.set_fs(nodeFs);
+    mkdirSync(path.dirname(file), { recursive: true });
+    const header = [...SOURCE_COLUMNS];
+    const blank = () => header.map(() => null);
+    const body = data.map((record) => header.map((column) => record[column] ?? null));
+    const sheet = XLSX.utils.aoa_to_sheet([
+      header,
+      blank(),
+      blank(),
+      blank(),
+      blank(),
+      blank(),
+      ...body,
+    ]);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, "Sheet1");
+    XLSX.writeFile(workbook, file);
+  }
+
+  it("keeps displayed dimension text and only trims surrounding whitespace", () => {
+    expect(dimensionToken(" 12.50 ")).toBe("12.50");
+    expect(dimensionToken(12.5)).toBe("12.5");
+
+    const result = validateRow(
+      row({
+        hh: "TT2101",
+        pm: "  盘  小  ",
+        pm_e: " Plate S ",
+        bj: " 3.15 ",
+        mdz_l: "20.80",
+        mdz_w: "20.80",
+        mdz_h: "2.00",
+      }),
+      { requirePrice: true, protectedCodes: [], sourceBatch: AUTUMN_BATCH },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.record.chinese_name).toBe("盘  小");
+    expect(result.record.english_name).toBe("Plate S");
+    expect(result.record.unit_price).toBe(3.15);
+    expect(result.record.dimensions).toBe("20.80 × 20.80 × 2.00 cm");
+    expect(result.record.barcode).toBeNull();
+    expect(result.record.source_batch).toBe(AUTUMN_BATCH);
+  });
+
+  it("rejects a missing autumn price without inventing one", () => {
+    const result = validateRow(row({ bj: null }), {
+      requirePrice: true,
+      protectedCodes: [],
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.join(" ")).toMatch(/Missing unit price/);
+  });
+
+  it("treats TT2101 and TT2101M as two products", () => {
+    const plan = buildImportPlan(
+      [
+        row({ hh: "TT2101", pm: "盘 小", pm_e: "Plate S" }),
+        row({ hh: " tt2101m ", excelRow: 8, pm: "21cm 盘", pm_e: "21cm Plate" }),
+        row({ hh: "K1", excelRow: 9, pm_e: "Plate S" }),
+      ],
+      { requirePrice: true, protectedCodes: [], sourceBatch: AUTUMN_BATCH },
+    );
+
+    expect(plan.valid.map((entry) => entry.record.product_code)).toEqual([
+      "TT2101",
+      "TT2101M",
+      "K1",
+    ]);
+    expect(plan.stats.duplicateCodes).toBe(0);
+    expect(plan.valid.filter((entry) => entry.record.english_name === "Plate S")).toHaveLength(2);
+  });
+
+  it("discovers China and Japan workbooks recursively and does not modify them", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "autumn-import-"));
+    tempDirs.push(root);
+    const china = path.join(root, "china", "2026─Ω╟∩-Anemone.xls");
+    const japan = path.join(root, "japan", "nested", "Miyazaki.xls");
+    yixingFile(china, [{ hh: "K10608-03", pm: "杯", pm_e: "Cup", bj: "1.80", mdz_l: "12.50", mdz_w: "8.30", mdz_h: "8.30" }]);
+    yixingFile(japan, [{ hh: "TT2101M", pm: "盘", pm_e: "Plate", bj: 3.15, mdz_l: 20.8, mdz_w: 20.8, mdz_h: 2 }]);
+    writeFileSync(path.join(root, "china", "~$lock.xls"), "");
+    writeFileSync(path.join(root, "readme.txt"), "not a workbook");
+
+    const before = statSync(china);
+    const files = listWorkbookFiles(root, true);
+    expect(files.map((file) => path.basename(file)).sort()).toEqual([
+      "2026─Ω╟∩-Anemone.xls",
+      "Miyazaki.xls",
+    ]);
+    expect(originFromWorkbookPath(root, china)).toBe("China");
+    expect(originFromWorkbookPath(root, japan)).toBe("Japan");
+    expect(isWorkbookName("~$lock.xls")).toBe(false);
+
+    const parsed = readWorkbookRows(china, { displayed: true, origin: "China" });
+    expect(parsed[0]?.sourceFile).toBe("2026─Ω╟∩-Anemone.xls");
+    expect(parsed[0]?.origin).toBe("China");
+    expect(parsed[0]?.hh).toBe("K10608-03");
+    const after = statSync(china);
+    expect(after.size).toBe(before.size);
+    expect(after.mtimeMs).toBe(before.mtimeMs);
+
+    const plan = buildImportPlan(
+      [
+        ...parsed,
+        ...readWorkbookRows(japan, { displayed: true, origin: "Japan" }),
+      ],
+      { requirePrice: true, protectedCodes: [], sourceBatch: AUTUMN_BATCH },
+    );
+    expect(plan.valid[0]?.record.dimensions).toContain("12.50");
+    expect(plan.valid.map((entry) => entry.record.product_code).sort()).toEqual([
+      "K10608-03",
+      "TT2101M",
+    ]);
+  });
+
+  it("aborts a commit when the autumn audit does not match and writes nothing", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "autumn-run-"));
+    tempDirs.push(root);
+    const file = path.join(root, "china", "one.xls");
+    yixingFile(file, [{ hh: "K1", pm: "杯", pm_e: "Cup", bj: 1, mdz_l: 1, mdz_w: 1, mdz_h: 1 }]);
+
+    const calls: string[] = [];
+    const lines: string[] = [];
+    const code = await runProductImport({
+      argv: [
+        "--source",
+        root,
+        "--batch",
+        AUTUMN_BATCH,
+        "--commit",
+        "--replace-active-catalogue",
+        "--approve-collisions",
+      ],
+      env: {},
+      log: (line) => lines.push(line),
+      writeTextFile: () => undefined,
+      database: {
+        async fetchAllProducts() {
+          calls.push("fetch");
+          return [];
+        },
+        async fetchCounts() {
+          calls.push("counts");
+          return { inquiries: 0, inquiryItems: 0 };
+        },
+        async replaceCatalogue() {
+          calls.push("replace");
+          return null;
+        },
+      },
+    });
+
+    expect(code).toBe(1);
+    expect(calls).toEqual([]);
+    expect(lines.join("\n")).toMatch(/No database writes were attempted/);
+    expect(lines.join("\n")).toMatch(/expected 661/);
+  });
+
+  it("counts a real autumn-sized plan only from its own rows", () => {
+    const rows = Array.from({ length: 661 }, (_, index) =>
+      row({
+        hh: index === 0 ? "TT2101" : index === 1 ? "TT2101M" : `K${index}`,
+        excelRow: 7 + index,
+      }),
+    );
+    rows[2] = row({ hh: "K10608-03", excelRow: 9 });
+    rows[3] = row({ hh: "KU0509-GR", excelRow: 10 });
+    rows[4] = row({ hh: "78032268", excelRow: 11 });
+    const plan = buildImportPlan(rows, {
+      requirePrice: true,
+      protectedCodes: [],
+      sourceBatch: AUTUMN_BATCH,
+    });
+    expect(checkAutumnAudit(autumnAudit(plan), codeCounts(plan))).toEqual([]);
   });
 });

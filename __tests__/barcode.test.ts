@@ -1,13 +1,23 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   barcodeFormatLabel,
+  BASIC_CAMERA_CONSTRAINTS,
   buildDecodeHints,
+  clampZoom,
+  decodeVideoFrames,
+  defaultZoom,
   describeCameraError,
+  frameSizeForPass,
   hasCameraSupport,
+  openScanCamera,
+  preferScanResolution,
   PRIMARY_FORMAT_NAME,
+  readZoomRange,
   REAR_CAMERA_CONSTRAINTS,
+  refreshCameraFocus,
   resolveScanMatch,
   setCameraTorch,
+  setCameraZoom,
   stopMediaStream,
   SUPPORTED_FORMAT_NAMES,
   tuneScanCamera,
@@ -212,13 +222,14 @@ describe("hasCameraSupport", () => {
 });
 
 describe("camera focus and flashlight", () => {
-  it("requests the rear camera and continuous focus without requiring either", () => {
+  it("requests the rear camera at 1080p without making focus a startup requirement", () => {
     expect(REAR_CAMERA_CONSTRAINTS).toEqual({
+      audio: false,
       video: {
         facingMode: { ideal: "environment" },
-        focusMode: { ideal: "continuous" },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
       },
-      audio: false,
     });
   });
 
@@ -238,12 +249,24 @@ describe("camera focus and flashlight", () => {
       applyConstraints: apply,
     } as unknown as MediaStreamTrack;
 
-    await expect(tuneScanCamera(supported)).resolves.toEqual({ torch: true });
+    await expect(tuneScanCamera(supported)).resolves.toEqual({
+      torch: true,
+      zoom: null,
+      canRefreshFocus: true,
+    });
     expect(apply).toHaveBeenCalledWith({ advanced: [{ focusMode: "continuous" }] });
 
     const plain = { kind: "video", stop() {} } as unknown as MediaStreamTrack;
-    await expect(tuneScanCamera(plain)).resolves.toEqual({ torch: false });
-    await expect(tuneScanCamera(undefined)).resolves.toEqual({ torch: false });
+    await expect(tuneScanCamera(plain)).resolves.toEqual({
+      torch: false,
+      zoom: null,
+      canRefreshFocus: false,
+    });
+    await expect(tuneScanCamera(undefined)).resolves.toEqual({
+      torch: false,
+      zoom: null,
+      canRefreshFocus: false,
+    });
   });
 
   it("toggles the torch and treats a rejected constraint as unsupported", async () => {
@@ -258,6 +281,164 @@ describe("camera focus and flashlight", () => {
     apply.mockRejectedValueOnce(new Error("unsupported"));
     await expect(setCameraTorch(track, false)).resolves.toBe(false);
     await expect(setCameraTorch(undefined, true)).resolves.toBe(false);
+  });
+});
+
+describe("camera capabilities", () => {
+  it("reads a zoom range and ignores devices that do not expose one", () => {
+    expect(readZoomRange({ zoom: { min: 1, max: 4, step: 0.1 } })).toEqual({
+      min: 1,
+      max: 4,
+      step: 0.1,
+    });
+    expect(readZoomRange({})).toBeNull();
+    expect(readZoomRange({ zoom: true })).toBeNull();
+    expect(readZoomRange(undefined)).toBeNull();
+  });
+
+  it("keeps a moderate default inside the reported range", () => {
+    const range = { min: 1, max: 5, step: 0.5 };
+    const chosen = defaultZoom(range);
+    expect(chosen).toBeGreaterThan(range.min);
+    expect(chosen).toBeLessThan(range.max);
+    expect(chosen).toBe(clampZoom(chosen, range));
+    expect(clampZoom(99, range)).toBe(range.max);
+    expect(clampZoom(0, range)).toBe(range.min);
+  });
+
+  it("applies zoom only within the device range", async () => {
+    const apply = vi.fn(async () => undefined);
+    const track = { applyConstraints: apply } as unknown as MediaStreamTrack;
+    const range = { min: 1, max: 3, step: 0.5 };
+
+    await expect(setCameraZoom(track, 2.2, range)).resolves.toBe(2);
+    expect(apply).toHaveBeenCalledWith({ advanced: [{ zoom: 2 }] });
+
+    apply.mockRejectedValueOnce(new Error("unsupported"));
+    await expect(setCameraZoom(track, 2, range)).resolves.toBeNull();
+    await expect(setCameraZoom(undefined, 2, range)).resolves.toBeNull();
+  });
+
+  it("falls back when the detailed camera request is rejected", async () => {
+    const request = vi.fn(async (constraints: MediaStreamConstraints) => {
+      const video = constraints.video;
+      if (video && typeof video === "object" && "width" in video) {
+        throw Object.assign(new Error("too big"), { name: "OverconstrainedError" });
+      }
+      return { id: "opened" } as unknown as MediaStream;
+    });
+
+    const opened = await openScanCamera(request);
+    expect(opened.stream).toEqual({ id: "opened" });
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request.mock.calls[1][0]).toEqual({
+      audio: false,
+      video: { facingMode: { ideal: "environment" } },
+    });
+  });
+
+  it("does not retry after a permission denial", async () => {
+    const request = vi.fn(async () => {
+      throw Object.assign(new Error("denied"), { name: "NotAllowedError" });
+    });
+    await expect(openScanCamera(request)).rejects.toMatchObject({ name: "NotAllowedError" });
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses any camera when the rear camera cannot satisfy a constraint", async () => {
+    const request = vi.fn(async (constraints: MediaStreamConstraints) => {
+      if (constraints.video !== true) {
+        throw Object.assign(new Error("no match"), { name: "OverconstrainedError" });
+      }
+      return { id: "basic" } as unknown as MediaStream;
+    });
+    const opened = await openScanCamera(request);
+    expect(opened.constraints).toEqual(BASIC_CAMERA_CONSTRAINTS);
+    expect(request).toHaveBeenCalledTimes(3);
+  });
+
+  it("keeps a 1080p detail frame and does not shrink a small frame", () => {
+    expect(frameSizeForPass(1920, 1080, "detail")).toEqual({
+      width: 1920,
+      height: 1080,
+      downscaled: false,
+    });
+    expect(frameSizeForPass(1920, 1080, "normal")).toEqual({
+      width: 1600,
+      height: 900,
+      downscaled: true,
+    });
+    expect(frameSizeForPass(640, 480, "detail")).toEqual({
+      width: 640,
+      height: 480,
+      downscaled: false,
+    });
+    expect(frameSizeForPass(640, 480, "normal")).toEqual({
+      width: 640,
+      height: 480,
+      downscaled: false,
+    });
+    const detail = frameSizeForPass(1920, 1080, "detail");
+    expect(Math.max(detail.width, detail.height)).toBeGreaterThanOrEqual(1600);
+  });
+
+  it("decodes one frame at a time, then a detail frame, and stops at the first text", async () => {
+    const passes: string[] = [];
+    let active = 0;
+    let maxActive = 0;
+    const decoded: string[] = [];
+
+    await decodeVideoFrames({
+      stopped: () => false,
+      gapMs: 0,
+      sleep: async () => {},
+      nextFrame: async (pass) => {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        passes.push(pass);
+        await Promise.resolve();
+        active -= 1;
+        if (pass === "detail") return { text: "78032268", format: "CODE_128" };
+        return null;
+      },
+      onDecoded: (frame) => decoded.push(frame.text),
+    });
+
+    expect(maxActive).toBe(1);
+    expect(passes).toEqual(["normal", "normal", "detail"]);
+    expect(decoded).toEqual(["78032268"]);
+  });
+
+  it("refreshes focus only when the track offers a safe mode", async () => {
+    const apply = vi.fn(async () => undefined);
+    const supported = {
+      getCapabilities: () => ({ focusMode: ["single-shot", "continuous"] }),
+      applyConstraints: apply,
+    } as unknown as MediaStreamTrack;
+
+    await expect(refreshCameraFocus(supported)).resolves.toBe(true);
+    expect(apply).toHaveBeenNthCalledWith(1, { advanced: [{ focusMode: "single-shot" }] });
+    expect(apply).toHaveBeenNthCalledWith(2, { advanced: [{ focusMode: "continuous" }] });
+
+    apply.mockRejectedValueOnce(new Error("busy"));
+    await expect(refreshCameraFocus(supported)).resolves.toBe(false);
+    await expect(refreshCameraFocus(undefined)).resolves.toBe(false);
+  });
+
+  it("ignores a resolution upgrade the camera rejects", async () => {
+    const apply = vi.fn(async () => {
+      throw Object.assign(new Error("no"), { name: "OverconstrainedError" });
+    });
+    const track = {
+      getCapabilities: () => ({ width: { max: 1280 }, height: { max: 720 } }),
+      applyConstraints: apply,
+    } as unknown as MediaStreamTrack;
+
+    await expect(preferScanResolution(track)).resolves.toBeUndefined();
+    expect(apply).toHaveBeenCalledWith({
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+    });
   });
 });
 

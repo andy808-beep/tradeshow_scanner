@@ -2,7 +2,9 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  latestCameraDiagnostic,
   latestScanDiagnostic,
+  resetCameraDiagnosticsForTests,
   resetScanDiagnosticsForTests,
 } from "@/lib/offline/diagnostics";
 import type { Product } from "@/lib/types";
@@ -11,8 +13,9 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   onProduct: vi.fn(),
   scanProductsLocalFirst: vi.fn(),
-  decodeFromConstraints: vi.fn(),
-  controlsStop: vi.fn(),
+  decodeFromCanvas: vi.fn(),
+  getUserMedia: vi.fn(),
+  frames: [] as Array<{ value: string; format?: number }>,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -50,24 +53,31 @@ vi.mock("@zxing/library", () => ({
 
 vi.mock("@zxing/browser", () => ({
   BrowserMultiFormatReader: class {
-    decodeFromConstraints = mocks.decodeFromConstraints;
+    decodeFromCanvas = mocks.decodeFromCanvas;
   },
 }));
 
 // Imported after the mocks so the component picks them up.
 const { default: BarcodeScanner } = await import("@/components/barcode-scanner");
 
-type DecodeCallback = (
-  result:
-    | { getText: () => string; getBarcodeFormat?: () => number }
-    | undefined,
-) => void;
-
-let decodeCallback: DecodeCallback | null = null;
 let tracks: Array<{
   stop: ReturnType<typeof vi.fn>;
   kind?: string;
-  getCapabilities?: () => { torch?: boolean; focusMode?: string[] };
+  label?: string;
+  getCapabilities?: () => {
+    torch?: boolean;
+    focusMode?: string[];
+    zoom?: { min: number; max: number; step: number };
+    width?: { max?: number };
+    height?: { max?: number };
+  };
+  getSettings?: () => {
+    width?: number;
+    height?: number;
+    facingMode?: string;
+    focusMode?: string;
+    zoom?: number;
+  };
   applyConstraints?: ReturnType<typeof vi.fn>;
 }> = [];
 
@@ -84,27 +94,33 @@ const PRODUCT: Product = {
   imageUrl: null,
 };
 
-function attachFakeStream(video: HTMLVideoElement) {
-  Object.defineProperty(video, "srcObject", {
-    value: { getTracks: () => tracks },
-    writable: true,
+function grantCamera() {
+  mocks.getUserMedia.mockImplementation(async () => ({
+    getVideoTracks: () => tracks,
+    getTracks: () => tracks,
+  }));
+  Object.defineProperty(navigator, "mediaDevices", {
+    value: { getUserMedia: mocks.getUserMedia },
     configurable: true,
   });
 }
 
-function grantCamera() {
-  Object.defineProperty(navigator, "mediaDevices", {
-    value: { getUserMedia: vi.fn() },
+function stubVideoFrame() {
+  Object.defineProperty(HTMLVideoElement.prototype, "videoWidth", {
     configurable: true,
+    get: () => 1920,
   });
+  Object.defineProperty(HTMLVideoElement.prototype, "videoHeight", {
+    configurable: true,
+    get: () => 1080,
+  });
+  HTMLVideoElement.prototype.play = () => Promise.resolve();
 }
 
 async function emit(value: string, format?: number) {
+  mocks.frames.push({ value, format });
   await act(async () => {
-    decodeCallback?.({
-      getText: () => value,
-      ...(format === undefined ? {} : { getBarcodeFormat: () => format }),
-    });
+    await new Promise((resolve) => setTimeout(resolve, 80));
   });
 }
 
@@ -123,17 +139,22 @@ function renderScanner(props: Partial<React.ComponentProps<typeof BarcodeScanner
 beforeEach(() => {
   vi.clearAllMocks();
   resetScanDiagnosticsForTests();
-  decodeCallback = null;
+  resetCameraDiagnosticsForTests();
+  mocks.frames.length = 0;
   tracks = [{ stop: vi.fn() }, { stop: vi.fn() }];
+  stubVideoFrame();
   grantCamera();
 
-  mocks.decodeFromConstraints.mockImplementation(
-    async (_constraints: unknown, video: HTMLVideoElement, cb: DecodeCallback) => {
-      decodeCallback = cb;
-      attachFakeStream(video);
-      return { stop: mocks.controlsStop };
-    },
-  );
+  mocks.decodeFromCanvas.mockImplementation(() => {
+    const next = mocks.frames.shift();
+    if (!next) {
+      throw Object.assign(new Error("not found"), { name: "NotFoundException" });
+    }
+    return {
+      getText: () => next.value,
+      ...(next.format === undefined ? {} : { getBarcodeFormat: () => next.format }),
+    };
+  });
   mocks.scanProductsLocalFirst.mockResolvedValue({
     status: "error",
     reason: "notFoundLocal",
@@ -150,28 +171,52 @@ describe("camera startup", () => {
     renderScanner();
 
     expect(await screen.findByText("正在扫描条码…")).toBeVisible();
-    expect(screen.getByText("保持平稳，将条码放入框内，避免反光")).toBeVisible();
+    expect(
+      screen.getByText("将条码放大并保持平稳，完整显示条码两端，避免反光。"),
+    ).toBeVisible();
 
-    const [constraints] = mocks.decodeFromConstraints.mock.calls[0];
-    expect(constraints).toEqual({
+    expect(mocks.getUserMedia.mock.calls[0][0]).toEqual({
+      audio: false,
       video: {
         facingMode: { ideal: "environment" },
-        focusMode: { ideal: "continuous" },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
       },
-      audio: false,
     });
+    expect(screen.queryByText(/未找到产品/)).toBeNull();
+    expect(screen.queryByLabelText("放大条码")).toBeNull();
+
+    await waitFor(() => expect(mocks.decodeFromCanvas).toHaveBeenCalled());
+    const canvas = mocks.decodeFromCanvas.mock.calls[0][0] as HTMLCanvasElement;
+    expect(canvas.width).toBeGreaterThanOrEqual(1600);
+    expect(canvas.height).toBeGreaterThanOrEqual(900);
   });
 
-  it("starts only one decode loop", async () => {
+  it("starts only one camera request", async () => {
     renderScanner();
     await screen.findByText("正在扫描条码…");
-    expect(mocks.decodeFromConstraints).toHaveBeenCalledTimes(1);
+    expect(mocks.getUserMedia).toHaveBeenCalledTimes(1);
+  });
+
+  it("still scans when the high-resolution request is rejected", async () => {
+    let calls = 0;
+    mocks.getUserMedia.mockImplementation(async () => {
+      calls += 1;
+      if (calls === 1) {
+        throw Object.assign(new Error("too big"), { name: "OverconstrainedError" });
+      }
+      return { getVideoTracks: () => tracks, getTracks: () => tracks };
+    });
+
+    renderScanner();
+    expect(await screen.findByText("正在扫描条码…")).toBeVisible();
+    expect(mocks.getUserMedia).toHaveBeenCalledTimes(2);
   });
 });
 
 describe("camera unavailable", () => {
   it("explains a denied permission and keeps manual entry usable", async () => {
-    mocks.decodeFromConstraints.mockRejectedValue(
+    mocks.getUserMedia.mockRejectedValue(
       Object.assign(new Error("nope"), { name: "NotAllowedError" }),
     );
 
@@ -183,7 +228,7 @@ describe("camera unavailable", () => {
   });
 
   it("reports when the device has no camera", async () => {
-    mocks.decodeFromConstraints.mockRejectedValue(
+    mocks.getUserMedia.mockRejectedValue(
       Object.assign(new Error("none"), { name: "NotFoundError" }),
     );
 
@@ -203,7 +248,7 @@ describe("camera unavailable", () => {
     expect(
       await screen.findByText("此浏览器无法使用摄像头。"),
     ).toBeVisible();
-    expect(mocks.decodeFromConstraints).not.toHaveBeenCalled();
+    expect(mocks.getUserMedia).not.toHaveBeenCalled();
   });
 });
 
@@ -256,7 +301,6 @@ describe("successful decoding", () => {
     await screen.findByText("正在扫描条码…");
     await emit("K10188-13");
 
-    expect(mocks.controlsStop).toHaveBeenCalled();
     for (const track of tracks) {
       expect(track.stop).toHaveBeenCalledTimes(1);
     }
@@ -372,7 +416,6 @@ describe("cleanup", () => {
 
     view.unmount();
 
-    expect(mocks.controlsStop).toHaveBeenCalled();
     for (const track of tracks) {
       expect(track.stop).toHaveBeenCalledTimes(1);
     }
@@ -396,7 +439,7 @@ describe("cleanup", () => {
 
 describe("manual entry", () => {
   it("looks up a typed code without the camera", async () => {
-    mocks.decodeFromConstraints.mockRejectedValue(
+    mocks.getUserMedia.mockRejectedValue(
       Object.assign(new Error("nope"), { name: "NotAllowedError" }),
     );
     mocks.scanProductsLocalFirst.mockResolvedValue({
@@ -446,15 +489,18 @@ describe("scan stages", () => {
 
     renderScanner();
     await screen.findByText("正在扫描条码…");
+    expect(screen.queryByText(/未找到产品/)).toBeNull();
     await emit("TT2101");
 
-    expect(screen.getAllByText("已识别：TT2101").length).toBeGreaterThan(0);
-    expect(mocks.scanProductsLocalFirst).not.toHaveBeenCalled();
-
     await waitFor(() => {
-      expect(screen.getAllByText("正在查找产品…").length).toBeGreaterThan(0);
+      expect(mocks.scanProductsLocalFirst).toHaveBeenCalled();
     });
-    expect(screen.queryByText("已识别：TT2101")).toBeNull();
+    expect(mocks.scanProductsLocalFirst.mock.calls[0][2]).toBe("TT2101");
+    expect(
+      screen.queryAllByText("已识别：TT2101").length +
+        screen.queryAllByText("正在查找产品…").length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText(/未找到产品/)).toBeNull();
 
     await act(async () => {
       resolveLookup({
@@ -537,6 +583,91 @@ describe("scan stages", () => {
       lookupSource: "local",
       result: "product",
     });
+  });
+});
+
+describe("small barcode help", () => {
+  it("shows zoom and refocus when the camera supports them", async () => {
+    const apply = vi.fn(async () => undefined);
+    tracks = [
+      {
+        stop: vi.fn(),
+        kind: "video",
+        label: "Back Camera",
+        getCapabilities: () => ({
+          zoom: { min: 1, max: 4, step: 0.5 },
+          focusMode: ["continuous"],
+          width: { max: 1920 },
+          height: { max: 1080 },
+        }),
+        getSettings: () => ({
+          width: 1920,
+          height: 1080,
+          facingMode: "environment",
+          focusMode: "continuous",
+          zoom: 1,
+        }),
+        applyConstraints: apply,
+      },
+    ];
+
+    renderScanner();
+    const slider = await screen.findByRole("slider", { name: "放大条码" });
+    expect(screen.getByText("条码太小时，可适当放大")).toBeVisible();
+    expect(slider).toHaveAttribute("max", "4");
+    expect(slider).toHaveAttribute("min", "1");
+    expect(Number((slider as HTMLInputElement).value)).toBeGreaterThan(1);
+    expect(Number((slider as HTMLInputElement).value)).toBeLessThanOrEqual(4);
+    expect(screen.getByRole("button", { name: "重新对焦" })).toBeVisible();
+    expect(latestCameraDiagnostic()).toMatchObject({
+      requestedWidth: 1920,
+      requestedHeight: 1080,
+      width: 1920,
+      height: 1080,
+      facingMode: "environment",
+      focusMode: "continuous",
+      deviceLabel: "Back Camera",
+    });
+
+    await act(async () => {
+      slider.dispatchEvent(new Event("input", { bubbles: true }));
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      setter?.call(slider, "3");
+      slider.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    await waitFor(() => {
+      expect(apply).toHaveBeenCalledWith({ advanced: [{ zoom: 3 }] });
+    });
+  });
+
+  it("explains an undecoded scan without saying the product is missing", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      renderScanner();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(80);
+      });
+      expect(screen.getByText("正在扫描条码…")).toBeVisible();
+      expect(screen.queryByText(/未找到产品/)).toBeNull();
+      expect(mocks.scanProductsLocalFirst).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6_000);
+      });
+      expect(
+        screen.getByText("暂未识别，请尝试靠近、放大、重新对焦或避免反光。"),
+      ).toBeVisible();
+      expect(screen.getByRole("button", { name: "重新扫描" })).toBeVisible();
+      expect(screen.getByRole("button", { name: "手动输入" })).toBeVisible();
+      expect(mocks.scanProductsLocalFirst).not.toHaveBeenCalled();
+      expect(screen.queryByText(/未找到产品/)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

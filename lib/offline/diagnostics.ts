@@ -41,6 +41,34 @@ export function resetScanDiagnosticsForTests(): void {
   latestScan = null;
 }
 
+export interface CameraTrackReport {
+  requestedWidth: number;
+  requestedHeight: number;
+  width: number | null;
+  height: number | null;
+  facingMode: string | null;
+  focusMode: string | null;
+  zoom: number | null;
+  deviceLabel: string;
+}
+
+let latestCamera: CameraTrackReport | null = null;
+
+export function latestCameraDiagnostic(): CameraTrackReport | null {
+  return latestCamera;
+}
+
+export function resetCameraDiagnosticsForTests(): void {
+  latestCamera = null;
+}
+
+/** Development-only record of the camera the scanner actually received. */
+export function recordCameraDiagnostic(report: CameraTrackReport): void {
+  latestCamera = report;
+  if (process.env.NODE_ENV !== "development") return;
+  console.info("[scan] camera", report);
+}
+
 /**
  * Remembers the latest scan and prints it in development only.
  * Employee-facing screens never show these fields.

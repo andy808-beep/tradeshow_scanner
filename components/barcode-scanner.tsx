@@ -7,20 +7,32 @@ import { useCatalogue } from "@/components/catalogue-provider";
 import {
   barcodeFormatLabel,
   buildDecodeHints,
+  CAMERA_IDEAL_HEIGHT,
+  CAMERA_IDEAL_WIDTH,
   CAMERA_UNSUPPORTED,
+  decodeVideoFrames,
+  defaultZoom,
   describeCameraError,
+  drawVideoFrame,
   firstVideoTrack,
   hasCameraSupport,
-  REAR_CAMERA_CONSTRAINTS,
+  openScanCamera,
+  preferScanResolution,
+  refreshCameraFocus,
+  SCAN_ASSIST_AFTER_MS,
   SCANNER_ASSETS_MISSING,
   setCameraTorch,
+  setCameraZoom,
   stopMediaStream,
+  readCameraSettings,
   tuneScanCamera,
   type CameraErrorInfo,
+  type ZoomRange,
 } from "@/lib/barcode";
 import { zh } from "@/lib/i18n/zh-cn";
 import { SCAN_LOOKUP_TIMEOUT_MS } from "@/lib/offline/constants";
 import {
+  recordCameraDiagnostic,
   recordScanDiagnostic,
   type ScanDiagnosticResult,
   type ScanLookupSource,
@@ -110,10 +122,19 @@ export default function BarcodeScanner({
   const [copied, setCopied] = useState(false);
   const [torchAvailable, setTorchAvailable] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
+  const [zoomRange, setZoomRange] = useState<ZoomRange | null>(null);
+  const [zoomValue, setZoomValue] = useState<number | null>(null);
+  const [canRefocus, setCanRefocus] = useState(false);
+  const [assist, setAssist] = useState(false);
+  /** Zoom chosen during this open scanner. It is not stored on the device. */
+  const zoomRef = useRef<number | null>(null);
+  const stopLoopRef = useRef<(() => void) | null>(null);
   /** Bumped to restart the camera after a retry. */
   const [session, setSession] = useState(0);
 
   const stopCamera = useCallback(() => {
+    stopLoopRef.current?.();
+    stopLoopRef.current = null;
     controlsRef.current?.stop();
     controlsRef.current = null;
     stopMediaStream(videoRef.current);
@@ -296,48 +317,97 @@ export default function BarcodeScanner({
         const reader = new BrowserMultiFormatReader(hints);
         scanStartedRef.current = performance.now();
 
-        // Requests camera permission — only ever reached after the user
-        // pressed Scan or Test camera, because this component mounts on that
-        // press. The decoder reads the full frame; the on-screen box is only
-        // a guide, so wide labels are not cropped out of the image.
-        controls = await reader.decodeFromConstraints(
-          REAR_CAMERA_CONSTRAINTS,
-          video,
-          (result) => {
-            if (!result || handledRef.current) return;
-            if (purposeRef.current === "test") return;
-            const text = result.getText();
-            if (text.trim() === "") return;
-            const decoded = result as {
-              getBarcodeFormat?: () => unknown;
-            };
-            const format =
-              typeof decoded.getBarcodeFormat === "function"
-                ? barcodeFormatLabel(
-                    decoded.getBarcodeFormat(),
-                    BarcodeFormat as unknown as Record<string, unknown>,
-                  )
-                : null;
-            void lookUpRef.current(text, format);
-          },
+        // Permission is requested only after Scan or Test camera. The decoder
+        // reads the full camera frame; the on-screen box is only a guide.
+        const opened = await openScanCamera((constraints) =>
+          navigator.mediaDevices.getUserMedia(constraints),
         );
+        if (cancelled) {
+          opened.stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
 
-        controlsRef.current = controls;
+        video.srcObject = opened.stream;
+        if (typeof video.play === "function") {
+          try {
+            await video.play();
+          } catch {
+            // Some browsers block play until the element is ready. Decoding
+            // still uses the stream once frames arrive.
+          }
+        }
+
+        const track = firstVideoTrack(video) ?? opened.stream.getVideoTracks()[0];
+        trackRef.current = track ?? null;
+        await preferScanResolution(track);
+        const support = await tuneScanCamera(track);
+        if (support.zoom && track) {
+          const chosen = zoomRef.current ?? defaultZoom(support.zoom);
+          const applied = await setCameraZoom(track, chosen, support.zoom);
+          if (applied !== null) zoomRef.current = applied;
+          if (!cancelled) {
+            setZoomRange(support.zoom);
+            setZoomValue(applied ?? chosen);
+          }
+        } else if (!cancelled) {
+          setZoomRange(null);
+          setZoomValue(null);
+        }
 
         if (cancelled) {
-          controls.stop();
-          controlsRef.current = null;
           stopMediaStream(video);
           return;
         }
 
-        const track = firstVideoTrack(video);
-        trackRef.current = track ?? null;
-        const support = await tuneScanCamera(track);
-        if (cancelled) return;
+        const settings = readCameraSettings(track);
+        recordCameraDiagnostic({
+          requestedWidth: CAMERA_IDEAL_WIDTH,
+          requestedHeight: CAMERA_IDEAL_HEIGHT,
+          ...settings,
+        });
+
         setTorchAvailable(support.torch);
         setTorchOn(false);
+        setCanRefocus(support.canRefreshFocus);
         setStatus({ kind: "scanning" });
+
+        const canvas = document.createElement("canvas");
+        let stopped = false;
+        stopLoopRef.current = () => {
+          stopped = true;
+        };
+        controls = {
+          stop() {
+            stopped = true;
+          },
+        };
+        controlsRef.current = controls;
+
+        void decodeVideoFrames({
+          stopped: () => stopped || cancelled || handledRef.current,
+          nextFrame: (pass) => {
+            const size = drawVideoFrame(video, canvas, pass);
+            if (size.width < 2 || size.height < 2) return null;
+            const result = reader.decodeFromCanvas(canvas);
+            const text = result?.getText?.() ?? "";
+            if (text.trim() === "") return null;
+            const decoded = result as { getBarcodeFormat?: () => unknown };
+            const format =
+              typeof decoded.getBarcodeFormat === "function"
+                ? decoded.getBarcodeFormat()
+                : null;
+            return { text, format };
+          },
+          onDecoded: (frame) => {
+            if (stopped || cancelled || handledRef.current) return;
+            if (purposeRef.current === "test") return;
+            const format = barcodeFormatLabel(
+              frame.format,
+              BarcodeFormat as unknown as Record<string, unknown>,
+            );
+            void lookUpRef.current(frame.text, format);
+          },
+        });
         // The camera really opened in this installed context, which is the
         // only proof that offline scanning will work later.
         cameraReadyRef.current?.();
@@ -351,6 +421,8 @@ export default function BarcodeScanner({
 
     return () => {
       cancelled = true;
+      stopLoopRef.current?.();
+      stopLoopRef.current = null;
       controls?.stop();
       controlsRef.current = null;
       stopMediaStream(videoElement);
@@ -378,15 +450,35 @@ export default function BarcodeScanner({
     setCopied(false);
     setTorchOn(false);
     setTorchAvailable(false);
+    setCanRefocus(false);
+    setAssist(false);
     trackRef.current = null;
     setStatus({ kind: "starting" });
     setSession((value) => value + 1);
   }
 
+  useEffect(() => {
+    if (status.kind !== "scanning" || purpose === "test") return;
+    const timer = setTimeout(() => setAssist(true), SCAN_ASSIST_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, [status.kind, purpose, session]);
+
   async function handleTorch() {
     const next = !torchOn;
     const ok = await setCameraTorch(trackRef.current, next);
     if (ok) setTorchOn(next);
+  }
+
+  async function handleZoom(next: number) {
+    if (!zoomRange || !trackRef.current) return;
+    const applied = await setCameraZoom(trackRef.current, next, zoomRange);
+    if (applied === null) return;
+    zoomRef.current = applied;
+    setZoomValue(applied);
+  }
+
+  async function handleRefocus() {
+    await refreshCameraFocus(trackRef.current);
   }
 
   function focusManualEntry() {
@@ -411,6 +503,7 @@ export default function BarcodeScanner({
 
   const testing = purpose === "test";
   const showViewfinder = status.kind === "starting" || status.kind === "scanning";
+  const showAssist = assist && status.kind === "scanning" && !testing;
   const rawValue =
     status.kind === "notFound" ||
     status.kind === "lookupFailed" ||
@@ -435,6 +528,15 @@ export default function BarcodeScanner({
             : statusLabel(status)}
         </p>
         <div className="ml-auto flex shrink-0 gap-2">
+          {canRefocus && showViewfinder && (
+            <button
+              type="button"
+              onClick={() => void handleRefocus()}
+              className="h-11 rounded-full bg-black/40 px-4 text-sm font-semibold"
+            >
+              {zh.scanner.refocus}
+            </button>
+          )}
           {torchAvailable && showViewfinder && (
             <button
               type="button"
@@ -471,6 +573,28 @@ export default function BarcodeScanner({
             <p className="px-6 text-center text-sm text-white/90">
               {testing ? zh.scanner.testInstruction : zh.scanner.instruction}
             </p>
+          </div>
+        )}
+
+        {showAssist && (
+          <div className="absolute inset-x-3 bottom-3 z-10 rounded-2xl bg-black/75 p-3 text-center">
+            <p className="text-sm leading-5">{zh.scanner.stillLooking}</p>
+            <div className="mt-2 flex flex-wrap justify-center gap-2">
+              <button
+                type="button"
+                onClick={handleRetry}
+                className="h-11 rounded-xl bg-white/15 px-4 text-sm font-semibold"
+              >
+                {zh.scanner.scanAgain}
+              </button>
+              <button
+                type="button"
+                onClick={focusManualEntry}
+                className="h-11 rounded-xl bg-white/15 px-4 text-sm font-semibold"
+              >
+                {zh.scanner.manualSearch}
+              </button>
+            </div>
           </div>
         )}
 
@@ -543,6 +667,26 @@ export default function BarcodeScanner({
       </div>
 
       {/* Anchored to the bottom so it stays within thumb reach on a phone. */}
+      {!testing && zoomRange && zoomValue !== null && showViewfinder && (
+        <div className="px-3 pt-2">
+          <label htmlFor="barcode-zoom" className="block text-xs text-white/80">
+            {zh.scanner.zoomIn}
+            <span className="mt-0.5 block text-white/60">{zh.scanner.zoomHint}</span>
+          </label>
+          <input
+            id="barcode-zoom"
+            aria-label={zh.scanner.zoomIn}
+            type="range"
+            min={zoomRange.min}
+            max={zoomRange.max}
+            step={zoomRange.step}
+            value={zoomValue}
+            onChange={(event) => void handleZoom(Number(event.target.value))}
+            className="mt-1 h-11 w-full accent-white"
+          />
+        </div>
+      )}
+
       {!testing && (
         <form
           onSubmit={handleManualSubmit}

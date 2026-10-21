@@ -11,8 +11,8 @@ import type { Product } from "@/lib/types";
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
-  decodeFromConstraints: vi.fn(),
-  controlsStop: vi.fn(),
+  getUserMedia: vi.fn(),
+  frames: [] as Array<{ value: string }>,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -34,7 +34,13 @@ vi.mock("@zxing/library", () => ({
 
 vi.mock("@zxing/browser", () => ({
   BrowserMultiFormatReader: class {
-    decodeFromConstraints = mocks.decodeFromConstraints;
+    decodeFromCanvas() {
+      const next = mocks.frames.shift();
+      if (!next) {
+        throw Object.assign(new Error("not found"), { name: "NotFoundException" });
+      }
+      return { getText: () => next.value };
+    }
   },
 }));
 
@@ -62,9 +68,6 @@ const PRODUCT: Product = {
 
 const CATALOGUE = [PRODUCT, { ...PRODUCT, id: "second", code: "K9426S-19", unitPrice: null }];
 
-type DecodeCallback = (result: { getText: () => string } | undefined) => void;
-
-let decodeCallback: DecodeCallback | null = null;
 let fetchSpy: ReturnType<typeof vi.fn>;
 
 function setNetwork(onLine: boolean) {
@@ -86,33 +89,37 @@ function productApiCalls() {
 }
 
 async function emit(value: string) {
+  mocks.frames.push({ value });
   await act(async () => {
-    decodeCallback?.({ getText: () => value });
+    await new Promise((resolve) => setTimeout(resolve, 80));
   });
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
-  decodeCallback = null;
+  mocks.frames.length = 0;
   resetScannerPreloadForTests();
   setNetwork(true);
 
+  Object.defineProperty(HTMLVideoElement.prototype, "videoWidth", {
+    configurable: true,
+    get: () => 1920,
+  });
+  Object.defineProperty(HTMLVideoElement.prototype, "videoHeight", {
+    configurable: true,
+    get: () => 1080,
+  });
+  HTMLVideoElement.prototype.play = () => Promise.resolve();
+
+  const tracks = [{ stop: vi.fn(), kind: "video" }];
+  mocks.getUserMedia.mockImplementation(async () => ({
+    getVideoTracks: () => tracks,
+    getTracks: () => tracks,
+  }));
   Object.defineProperty(navigator, "mediaDevices", {
-    value: { getUserMedia: vi.fn() },
+    value: { getUserMedia: mocks.getUserMedia },
     configurable: true,
   });
-
-  mocks.decodeFromConstraints.mockImplementation(
-    async (_constraints: unknown, video: HTMLVideoElement, cb: DecodeCallback) => {
-      decodeCallback = cb;
-      Object.defineProperty(video, "srcObject", {
-        value: { getTracks: () => [{ stop: vi.fn() }] },
-        writable: true,
-        configurable: true,
-      });
-      return { stop: mocks.controlsStop };
-    },
-  );
 
   fetchSpy = vi.fn(async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : String(input);
@@ -157,7 +164,7 @@ describe("offline scan acceptance", () => {
     //    camera, and no camera was requested without a user action.
     expect(await screen.findByText(READINESS_MESSAGES.cameraTest)).toBeVisible();
     expect(screen.queryByText(READINESS_MESSAGES.ready)).toBeNull();
-    expect(mocks.decodeFromConstraints).not.toHaveBeenCalled();
+    expect(mocks.getUserMedia).not.toHaveBeenCalled();
 
     // 4. Complete the camera test.
     fireEvent.click(screen.getByRole("button", { name: "测试摄像头" }));

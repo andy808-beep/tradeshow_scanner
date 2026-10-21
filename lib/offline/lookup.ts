@@ -2,7 +2,11 @@ import { getProductByCodeRequest, searchProductsRequest } from "@/lib/api-client
 import { resolveScanMatch, type ScanMatch } from "@/lib/barcode";
 import type { Product } from "@/lib/types";
 import type { CatalogueAccess } from "./authorization";
-import { LOOKUP_MESSAGES, NETWORK_REFRESH_TIMEOUT_MS } from "./constants";
+import {
+  LOOKUP_MESSAGES,
+  NETWORK_REFRESH_TIMEOUT_MS,
+  SCAN_LOOKUP_TIMEOUT_MS,
+} from "./constants";
 import { offlineDebug } from "./diagnostics";
 import { findLocalProductByCode, localScanCandidates, searchLocalProducts } from "./search";
 
@@ -137,8 +141,13 @@ async function bounded<T>(
 export async function refreshSearchFromApi(
   query: string,
   outer?: AbortSignal,
+  timeoutMs = NETWORK_REFRESH_TIMEOUT_MS,
 ): Promise<Product[] | null> {
-  const products = await bounded((signal) => searchProductsRequest(query, signal), outer);
+  const products = await bounded(
+    (signal) => searchProductsRequest(query, signal),
+    outer,
+    timeoutMs,
+  );
   offlineDebug("search.refresh", { refreshed: products !== null });
   return products;
 }
@@ -168,9 +177,24 @@ export async function getProductLocalFirst(
 }
 
 /**
- * Scan resolution. Identical local rules to manual search. When the local
- * catalogue is valid it wins immediately; the authenticated search API is
- * used when that catalogue is missing, expired, or does not contain the code.
+ * A stored row, ignoring the seven-day window. Used only after an online scan
+ * has already failed, so a dead radio cannot hide a catalogue we still have.
+ */
+function storedScan(products: Product[], rawValue: string): LocalFirstScan | null {
+  if (products.length === 0) return null;
+  const match = resolveScanMatch(rawValue, localScanCandidates(products, rawValue));
+  if (match.kind === "none") return null;
+  return { status: "match", match, source: "local" };
+}
+
+/**
+ * Scan resolution.
+ *
+ * A valid IndexedDB catalogue is checked before any network request and, when
+ * it hits, is returned immediately — `online` is only a hint and must not be
+ * awaited. The raw decoded string is preserved; matching trims and compares
+ * case-insensitively inside the local lookup. An online refresh is attempted
+ * only when that lookup misses, and it gives up after {@link SCAN_LOOKUP_TIMEOUT_MS}.
  */
 export async function scanProductsLocalFirst(
   products: Product[],
@@ -183,20 +207,24 @@ export async function scanProductsLocalFirst(
   if (local.status === "match") return local;
   if (!online) return local;
 
-  const remote = await refreshSearchFromApi(rawValue, signal);
-  if (remote === null) {
-    return { status: "error", reason: "network", message: LOOKUP_MESSAGES.network };
-  }
-
-  const match = resolveScanMatch(rawValue, remote);
-  if (match.kind === "none") {
+  const remote = await refreshSearchFromApi(rawValue, signal, SCAN_LOOKUP_TIMEOUT_MS);
+  if (remote !== null) {
+    const match = resolveScanMatch(rawValue, remote);
+    if (match.kind !== "none") {
+      return { status: "match", match, source: "network" };
+    }
+    if (access.kind === "ready") return local;
     return {
       status: "error",
       reason: "notFoundLocal",
       message: LOOKUP_MESSAGES.notFoundLocal,
     };
   }
-  return { status: "match", match, source: "network" };
+
+  const stored = storedScan(products, rawValue);
+  if (stored) return stored;
+  if (access.kind === "ready") return local;
+  return { status: "error", reason: "network", message: LOOKUP_MESSAGES.network };
 }
 
 /**

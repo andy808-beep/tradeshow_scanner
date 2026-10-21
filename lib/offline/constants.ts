@@ -26,6 +26,12 @@ export const MAX_LOCAL_SEARCH_RESULTS = 30;
  */
 export const NETWORK_REFRESH_TIMEOUT_MS = 4_000;
 
+/**
+ * A scan gives the network this long, then uses the stored catalogue.
+ * Short enough that a dead radio cannot leave the screen on “正在查找”.
+ */
+export const SCAN_LOOKUP_TIMEOUT_MS = 1_500;
+
 export const LOOKUP_MESSAGES = {
   unsynced: zh.search.missingOffline,
   expired: zh.sync.catalogueExpired,

@@ -12,7 +12,12 @@ import {
   scanProductsLocalFirst,
   searchProductsLocalFirst,
 } from "@/lib/offline/lookup";
-import { LOOKUP_MESSAGES } from "@/lib/offline/constants";
+import { LOOKUP_MESSAGES, SCAN_LOOKUP_TIMEOUT_MS } from "@/lib/offline/constants";
+import {
+  latestScanDiagnostic,
+  recordScanDiagnostic,
+  resetScanDiagnosticsForTests,
+} from "@/lib/offline/diagnostics";
 import type { CatalogueAccess } from "@/lib/offline/authorization";
 import type { Product } from "@/lib/types";
 
@@ -249,6 +254,156 @@ describe("offline barcode scan lookup", () => {
       source: "network",
     });
     vi.unstubAllGlobals();
+  });
+
+  it("returns a ready IndexedDB hit immediately while the phone reports online", async () => {
+    const fetchSpy = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const started = Date.now();
+    const result = await scanProductsLocalFirst(
+      [K10188],
+      READY,
+      "K10188-13",
+      undefined,
+      true,
+    );
+
+    expect(Date.now() - started).toBeLessThan(100);
+    expect(result).toEqual({
+      status: "match",
+      match: { kind: "single", product: K10188 },
+      source: "local",
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("resolves numeric and letter-hyphen codes from IndexedDB without waiting on the network", async () => {
+    const numeric = { ...K10188, id: "numeric", code: "78032268" };
+    const hyphenated = { ...K10188, id: "hyphen", code: "KU0509-GR" };
+    const fetchSpy = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const numericResult = await scanProductsLocalFirst(
+      [numeric],
+      READY,
+      "78032268",
+      undefined,
+      true,
+    );
+    const hyphenResult = await scanProductsLocalFirst(
+      [hyphenated],
+      READY,
+      "KU0509-GR",
+      undefined,
+      true,
+    );
+
+    expect(numericResult).toMatchObject({
+      status: "match",
+      source: "local",
+      match: { kind: "single", product: numeric },
+    });
+    expect(hyphenResult).toMatchObject({
+      status: "match",
+      source: "local",
+      match: { kind: "single", product: hyphenated },
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("falls back to IndexedDB when the online lookup never answers", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+
+    try {
+      const pending = scanProductsLocalFirst(
+        [K10188],
+        { kind: "expired", meta: { lastSyncedAt: 1, count: 1 }, expiresAt: 2 },
+        "K10188-13",
+        undefined,
+        true,
+      );
+      await vi.advanceTimersByTimeAsync(SCAN_LOOKUP_TIMEOUT_MS);
+      await expect(pending).resolves.toEqual({
+        status: "match",
+        match: { kind: "single", product: K10188 },
+        source: "local",
+      });
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("stops a hanging lookup and reports the local miss", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+
+    try {
+      const pending = scanProductsLocalFirst([K10188], READY, "NO-SUCH", undefined, true);
+      await vi.advanceTimersByTimeAsync(SCAN_LOOKUP_TIMEOUT_MS);
+      await expect(pending).resolves.toEqual({
+        status: "error",
+        reason: "notFoundLocal",
+        message: LOOKUP_MESSAGES.notFoundLocal,
+      });
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("does not call a missing catalogue a product miss when the network times out", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+
+    try {
+      const pending = scanProductsLocalFirst(
+        [],
+        { kind: "missing" },
+        "78032268",
+        undefined,
+        true,
+      );
+      await vi.advanceTimersByTimeAsync(SCAN_LOOKUP_TIMEOUT_MS);
+      await expect(pending).resolves.toMatchObject({
+        status: "error",
+        reason: "network",
+      });
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe("scan diagnostics", () => {
+  it("records decode time, format, source and result, and stays quiet outside development", () => {
+    resetScanDiagnosticsForTests();
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    recordScanDiagnostic({
+      decodeMs: 840,
+      decodedValue: "KU0509-GR",
+      format: "CODE_39",
+      lookupSource: "local",
+      lookupMs: 2,
+      result: "product",
+    });
+
+    expect(latestScanDiagnostic()).toEqual({
+      decodeMs: 840,
+      decodedValue: "KU0509-GR",
+      format: "CODE_39",
+      lookupSource: "local",
+      lookupMs: 2,
+      result: "product",
+    });
+    expect(info).not.toHaveBeenCalled();
+    info.mockRestore();
   });
 });
 

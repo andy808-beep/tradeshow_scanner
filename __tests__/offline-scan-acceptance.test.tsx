@@ -182,7 +182,7 @@ describe("offline scan acceptance", () => {
 
     // 6. Open Scan offline; the camera starts from the cached chunks.
     fireEvent.click(screen.getByRole("button", { name: "打开扫码器" }));
-    expect(await screen.findByText("扫描产品条码")).toBeVisible();
+    expect(await screen.findByText("正在扫描条码…")).toBeVisible();
 
     // 7. Decode a known code, normalized against the local catalogue.
     await emit("k10188 13");
@@ -237,10 +237,12 @@ describe("offline scan acceptance", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "打开扫码器" }));
-    await screen.findByText("扫描产品条码");
+    await screen.findByText("正在扫描条码…");
     await emit("9999999999999");
 
-    expect((await screen.findAllByText("未找到该产品。")).length).toBeGreaterThan(0);
+    expect(
+      (await screen.findAllByText("未找到产品：9999999999999")).length,
+    ).toBeGreaterThan(0);
     expect(screen.getByText("9999999999999")).toBeVisible();
     expect(productApiCalls()).toEqual([]);
   });

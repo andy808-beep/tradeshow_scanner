@@ -41,9 +41,15 @@ export const PRIMARY_FORMAT_NAME: SupportedFormatName = "CODE_39";
 
 export type SupportedFormatName = (typeof SUPPORTED_FORMAT_NAMES)[number];
 
-/** Rear camera where available; `ideal` keeps laptops working as a fallback. */
+/**
+ * Rear camera where available; `ideal` keeps laptops working as a fallback.
+ * Continuous focus is requested as `ideal` so a device that lacks it still opens.
+ */
 export const REAR_CAMERA_CONSTRAINTS: MediaStreamConstraints = {
-  video: { facingMode: { ideal: "environment" } },
+  video: {
+    facingMode: { ideal: "environment" },
+    focusMode: { ideal: "continuous" },
+  } as MediaTrackConstraints,
   audio: false,
 };
 
@@ -171,6 +177,82 @@ export function hasCameraSupport(): boolean {
  * Stops every track on the video element's stream and detaches it. Returns how
  * many tracks were stopped so tests can assert the camera was released.
  */
+/** Maps a ZXing format value back to a supported name, when the enum is the one we passed in. */
+export function barcodeFormatLabel(
+  format: unknown,
+  barcodeFormat: Record<string, unknown>,
+): string | null {
+  if (typeof format !== "number") return null;
+  for (const name of SUPPORTED_FORMAT_NAMES) {
+    if (barcodeFormat[name] === format) return name;
+  }
+  return null;
+}
+
+export function firstVideoTrack(
+  video: HTMLVideoElement | null | undefined,
+): MediaStreamTrack | undefined {
+  const stream = video?.srcObject as MediaStream | null;
+  if (!stream) return undefined;
+  if (typeof stream.getVideoTracks === "function") {
+    const videoTracks = stream.getVideoTracks();
+    if (videoTracks.length > 0) return videoTracks[0];
+  }
+  if (typeof stream.getTracks !== "function") return undefined;
+  const tracks = stream.getTracks();
+  return tracks.find((track) => track.kind === "video") ?? tracks[0];
+}
+
+/**
+ * Turns on continuous autofocus when the open track advertises it.
+ * Returns whether a flashlight can be toggled. Failures are ignored so a
+ * camera that rejects the constraint still scans.
+ */
+export async function tuneScanCamera(
+  track: MediaStreamTrack | null | undefined,
+): Promise<{ torch: boolean }> {
+  if (!track || typeof track.getCapabilities !== "function") return { torch: false };
+
+  let capabilities: { torch?: boolean; focusMode?: string[] };
+  try {
+    capabilities = track.getCapabilities() as { torch?: boolean; focusMode?: string[] };
+  } catch {
+    return { torch: false };
+  }
+
+  const focusModes = capabilities.focusMode;
+  if (
+    Array.isArray(focusModes) &&
+    focusModes.includes("continuous") &&
+    typeof track.applyConstraints === "function"
+  ) {
+    try {
+      await track.applyConstraints({
+        advanced: [{ focusMode: "continuous" } as unknown as MediaTrackConstraintSet],
+      });
+    } catch {
+      // The preview is already running. Focus is best-effort.
+    }
+  }
+
+  return { torch: capabilities.torch === true };
+}
+
+export async function setCameraTorch(
+  track: MediaStreamTrack | null | undefined,
+  enabled: boolean,
+): Promise<boolean> {
+  if (!track || typeof track.applyConstraints !== "function") return false;
+  try {
+    await track.applyConstraints({
+      advanced: [{ torch: enabled } as unknown as MediaTrackConstraintSet],
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function stopMediaStream(video: HTMLVideoElement | null | undefined): number {
   if (!video) return 0;
 

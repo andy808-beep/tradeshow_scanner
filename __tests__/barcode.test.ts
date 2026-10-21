@@ -1,12 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  barcodeFormatLabel,
   buildDecodeHints,
   describeCameraError,
   hasCameraSupport,
   PRIMARY_FORMAT_NAME,
+  REAR_CAMERA_CONSTRAINTS,
   resolveScanMatch,
+  setCameraTorch,
   stopMediaStream,
   SUPPORTED_FORMAT_NAMES,
+  tuneScanCamera,
 } from "@/lib/barcode";
 import type { Product } from "@/lib/types";
 
@@ -204,6 +208,56 @@ describe("hasCameraSupport", () => {
     });
 
     expect(hasCameraSupport()).toBe(true);
+  });
+});
+
+describe("camera focus and flashlight", () => {
+  it("requests the rear camera and continuous focus without requiring either", () => {
+    expect(REAR_CAMERA_CONSTRAINTS).toEqual({
+      video: {
+        facingMode: { ideal: "environment" },
+        focusMode: { ideal: "continuous" },
+      },
+      audio: false,
+    });
+  });
+
+  it("names Code 39 and Code 128 when the decoder reports them", () => {
+    const formats = { CODE_39: 10, CODE_128: 11, QR_CODE: 16 };
+    expect(barcodeFormatLabel(10, formats)).toBe("CODE_39");
+    expect(barcodeFormatLabel(11, formats)).toBe("CODE_128");
+    expect(barcodeFormatLabel(99, formats)).toBeNull();
+    expect(barcodeFormatLabel(undefined, formats)).toBeNull();
+  });
+
+  it("applies continuous focus and reports a torch only when the track supports them", async () => {
+    const apply = vi.fn(async () => undefined);
+    const supported = {
+      kind: "video",
+      getCapabilities: () => ({ focusMode: ["continuous"], torch: true }),
+      applyConstraints: apply,
+    } as unknown as MediaStreamTrack;
+
+    await expect(tuneScanCamera(supported)).resolves.toEqual({ torch: true });
+    expect(apply).toHaveBeenCalledWith({ advanced: [{ focusMode: "continuous" }] });
+
+    const plain = { kind: "video", stop() {} } as unknown as MediaStreamTrack;
+    await expect(tuneScanCamera(plain)).resolves.toEqual({ torch: false });
+    await expect(tuneScanCamera(undefined)).resolves.toEqual({ torch: false });
+  });
+
+  it("toggles the torch and treats a rejected constraint as unsupported", async () => {
+    const apply = vi.fn(async () => undefined);
+    const track = {
+      applyConstraints: apply,
+    } as unknown as MediaStreamTrack;
+
+    await expect(setCameraTorch(track, true)).resolves.toBe(true);
+    expect(apply).toHaveBeenCalledWith({ advanced: [{ torch: true }] });
+
+    apply.mockRejectedValueOnce(new Error("unsupported"));
+    await expect(setCameraTorch(track, false)).resolves.toBe(false);
+    await expect(setCameraTorch(undefined, true)).resolves.toBe(false);
   });
 });
 

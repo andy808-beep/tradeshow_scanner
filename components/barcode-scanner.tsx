@@ -5,17 +5,27 @@ import type { DecodeHintType } from "@zxing/library";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useCatalogue } from "@/components/catalogue-provider";
 import {
+  barcodeFormatLabel,
   buildDecodeHints,
   CAMERA_UNSUPPORTED,
   describeCameraError,
+  firstVideoTrack,
   hasCameraSupport,
   REAR_CAMERA_CONSTRAINTS,
   SCANNER_ASSETS_MISSING,
+  setCameraTorch,
   stopMediaStream,
+  tuneScanCamera,
   type CameraErrorInfo,
 } from "@/lib/barcode";
 import { zh } from "@/lib/i18n/zh-cn";
-import { scanProductsLocalFirst } from "@/lib/offline/lookup";
+import { SCAN_LOOKUP_TIMEOUT_MS } from "@/lib/offline/constants";
+import {
+  recordScanDiagnostic,
+  type ScanDiagnosticResult,
+  type ScanLookupSource,
+} from "@/lib/offline/diagnostics";
+import { scanProductsLocalFirst, type LocalFirstScan } from "@/lib/offline/lookup";
 import type { Product } from "@/lib/types";
 
 /**
@@ -29,10 +39,36 @@ import type { Product } from "@/lib/types";
 type Status =
   | { kind: "starting" }
   | { kind: "scanning" }
+  | { kind: "recognized"; raw: string }
   | { kind: "lookingUp"; raw: string }
   | { kind: "notFound"; raw: string }
   | { kind: "lookupFailed"; raw: string; message: string }
   | { kind: "cameraError"; info: CameraErrorInfo };
+
+function statusLabel(status: Status): string {
+  switch (status.kind) {
+    case "starting":
+      return zh.scanner.loadingCamera;
+    case "scanning":
+      return zh.scanner.scanning;
+    case "recognized":
+      return zh.scanner.recognized(status.raw);
+    case "lookingUp":
+      return zh.scanner.lookingUp;
+    case "notFound":
+      return zh.scanner.productNotFoundCode(status.raw);
+    case "lookupFailed":
+      return status.message;
+    case "cameraError":
+      return zh.scanner.cameraUnavailable;
+  }
+}
+
+function nextPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
 
 interface BarcodeScannerProps {
   onClose: () => void;
@@ -50,15 +86,6 @@ interface BarcodeScannerProps {
   purpose?: "scan" | "test";
 }
 
-const STATUS_LABELS: Record<Status["kind"], string> = {
-  starting: zh.scanner.loadingCamera,
-  scanning: zh.scanner.heading,
-  lookingUp: zh.scanner.loadingProduct,
-  notFound: zh.scanner.productNotFound,
-  lookupFailed: zh.scanner.lookupFailed,
-  cameraError: zh.scanner.cameraUnavailable,
-};
-
 export default function BarcodeScanner({
   onClose,
   onProduct,
@@ -70,12 +97,19 @@ export default function BarcodeScanner({
   const videoRef = useRef<HTMLVideoElement>(null);
   const controlsRef = useRef<IScannerControls | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const trackRef = useRef<MediaStreamTrack | null>(null);
+  /** When the camera became ready to decode. Decode time is measured from here. */
+  const scanStartedRef = useRef(0);
   /** Guards against the decode loop reporting the same code repeatedly. */
   const handledRef = useRef(false);
+  /** Bumped on retry and unmount so a late lookup cannot overwrite a new scan. */
+  const generationRef = useRef(0);
 
   const [status, setStatus] = useState<Status>({ kind: "starting" });
   const [manualValue, setManualValue] = useState("");
   const [copied, setCopied] = useState(false);
+  const [torchAvailable, setTorchAvailable] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
   /** Bumped to restart the camera after a retry. */
   const [session, setSession] = useState(0);
 
@@ -86,14 +120,57 @@ export default function BarcodeScanner({
   }, []);
 
   const lookUp = useCallback(
-    async (rawValue: string) => {
+    async (rawValue: string, format: string | null = null) => {
+      if (rawValue.trim() === "" || handledRef.current) return;
       handledRef.current = true;
+      const generation = generationRef.current;
+      const decodeMs = Math.max(0, Math.round(performance.now() - scanStartedRef.current));
       stopCamera();
-      setStatus({ kind: "lookingUp", raw: rawValue });
+      setStatus({ kind: "recognized", raw: rawValue });
+      // Let the recognized code paint before lookup starts, so a slow camera
+      // and a slow catalogue read can be told apart on the floor.
+      await nextPaint();
+      if (generation !== generationRef.current) return;
 
+      setStatus({ kind: "lookingUp", raw: rawValue });
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
+      const lookupStarted = performance.now();
+
+      const finish = (result: LocalFirstScan, lookupMs: number) => {
+        let lookupSource: ScanLookupSource = "none";
+        let diagnosticResult: ScanDiagnosticResult = "failed";
+        if (result.status === "match") {
+          lookupSource = result.source === "local" ? "local" : "online";
+          diagnosticResult =
+            result.match.kind === "single"
+              ? "product"
+              : result.match.kind === "multiple"
+                ? "multiple"
+                : "not-found";
+        } else if (result.reason === "notFoundLocal") {
+          lookupSource = "local";
+          diagnosticResult = "not-found";
+        } else if (
+          result.reason === "network" &&
+          lookupMs >= SCAN_LOOKUP_TIMEOUT_MS - 50
+        ) {
+          lookupSource = "online";
+          diagnosticResult = "timeout";
+        } else if (result.reason === "network") {
+          lookupSource = "online";
+          diagnosticResult = "failed";
+        }
+        recordScanDiagnostic({
+          decodeMs,
+          decodedValue: rawValue,
+          format,
+          lookupSource,
+          lookupMs,
+          result: diagnosticResult,
+        });
+      };
 
       try {
         const result = await scanProductsLocalFirst(
@@ -103,6 +180,9 @@ export default function BarcodeScanner({
           controller.signal,
           online,
         );
+        const lookupMs = Math.max(0, Math.round(performance.now() - lookupStarted));
+        finish(result, lookupMs);
+        if (generation !== generationRef.current || controller.signal.aborted) return;
 
         if (result.status === "error") {
           if (result.reason === "notFoundLocal") {
@@ -131,7 +211,16 @@ export default function BarcodeScanner({
 
         setStatus({ kind: "notFound", raw: rawValue });
       } catch (error) {
-        if (controller.signal.aborted) return;
+        const lookupMs = Math.max(0, Math.round(performance.now() - lookupStarted));
+        recordScanDiagnostic({
+          decodeMs,
+          decodedValue: rawValue,
+          format,
+          lookupSource: "none",
+          lookupMs,
+          result: "failed",
+        });
+        if (generation !== generationRef.current || controller.signal.aborted) return;
         setStatus({
           kind: "lookupFailed",
           raw: rawValue,
@@ -205,17 +294,31 @@ export default function BarcodeScanner({
         ) as unknown as Map<DecodeHintType, unknown>;
 
         const reader = new BrowserMultiFormatReader(hints);
+        scanStartedRef.current = performance.now();
 
         // Requests camera permission — only ever reached after the user
         // pressed Scan or Test camera, because this component mounts on that
-        // press.
+        // press. The decoder reads the full frame; the on-screen box is only
+        // a guide, so wide labels are not cropped out of the image.
         controls = await reader.decodeFromConstraints(
           REAR_CAMERA_CONSTRAINTS,
           video,
           (result) => {
             if (!result || handledRef.current) return;
             if (purposeRef.current === "test") return;
-            void lookUpRef.current(result.getText());
+            const text = result.getText();
+            if (text.trim() === "") return;
+            const decoded = result as {
+              getBarcodeFormat?: () => unknown;
+            };
+            const format =
+              typeof decoded.getBarcodeFormat === "function"
+                ? barcodeFormatLabel(
+                    decoded.getBarcodeFormat(),
+                    BarcodeFormat as unknown as Record<string, unknown>,
+                  )
+                : null;
+            void lookUpRef.current(text, format);
           },
         );
 
@@ -228,6 +331,12 @@ export default function BarcodeScanner({
           return;
         }
 
+        const track = firstVideoTrack(video);
+        trackRef.current = track ?? null;
+        const support = await tuneScanCamera(track);
+        if (cancelled) return;
+        setTorchAvailable(support.torch);
+        setTorchOn(false);
         setStatus({ kind: "scanning" });
         // The camera really opened in this installed context, which is the
         // only proof that offline scanning will work later.
@@ -251,6 +360,7 @@ export default function BarcodeScanner({
   // Releases the camera and any in-flight lookup when the scanner unmounts.
   useEffect(() => {
     return () => {
+      generationRef.current += 1;
       abortRef.current?.abort();
     };
   }, []);
@@ -262,10 +372,25 @@ export default function BarcodeScanner({
   }
 
   function handleRetry() {
+    generationRef.current += 1;
+    abortRef.current?.abort();
     handledRef.current = false;
     setCopied(false);
+    setTorchOn(false);
+    setTorchAvailable(false);
+    trackRef.current = null;
     setStatus({ kind: "starting" });
     setSession((value) => value + 1);
+  }
+
+  async function handleTorch() {
+    const next = !torchOn;
+    const ok = await setCameraTorch(trackRef.current, next);
+    if (ok) setTorchOn(next);
+  }
+
+  function focusManualEntry() {
+    document.getElementById("manual-code")?.focus();
   }
 
   function handleManualSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -307,16 +432,28 @@ export default function BarcodeScanner({
         >
           {testing && status.kind === "scanning"
             ? zh.scanner.cameraReady
-            : STATUS_LABELS[status.kind]}
+            : statusLabel(status)}
         </p>
-        <button
-          type="button"
-          onClick={handleClose}
-          aria-label={testing ? zh.scanner.closeCameraTest : zh.scanner.close}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-black/40 text-2xl leading-none"
-        >
-          ×
-        </button>
+        <div className="ml-auto flex shrink-0 gap-2">
+          {torchAvailable && showViewfinder && (
+            <button
+              type="button"
+              onClick={() => void handleTorch()}
+              aria-pressed={torchOn}
+              className="h-11 rounded-full bg-black/40 px-4 text-sm font-semibold"
+            >
+              {torchOn ? zh.scanner.flashlightOff : zh.scanner.flashlight}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleClose}
+            aria-label={testing ? zh.scanner.closeCameraTest : zh.scanner.close}
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-black/40 text-2xl leading-none"
+          >
+            ×
+          </button>
+        </div>
       </div>
 
       <div className="relative flex-1 overflow-hidden">
@@ -330,7 +467,7 @@ export default function BarcodeScanner({
 
         {showViewfinder && (
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-4">
-            <div className="h-44 w-[78%] rounded-2xl border-4 border-white/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]" />
+            <div className="h-28 w-[94%] rounded-2xl border-4 border-white/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]" />
             <p className="px-6 text-center text-sm text-white/90">
               {testing ? zh.scanner.testInstruction : zh.scanner.instruction}
             </p>
@@ -358,22 +495,27 @@ export default function BarcodeScanner({
           </div>
         )}
 
+        {status.kind === "recognized" && (
+          <div className="absolute inset-0 flex items-center justify-center px-6 text-center">
+            <p className="text-base font-semibold">{zh.scanner.recognized(status.raw)}</p>
+          </div>
+        )}
+
         {status.kind === "lookingUp" && (
           <div className="absolute inset-0 flex items-center justify-center px-6 text-center">
-            <p className="text-sm text-white/85">
-              {zh.scanner.loadingProduct}{" "}
-              <span className="font-mono break-all">{status.raw}</span>
-            </p>
+            <p className="text-base font-semibold">{zh.scanner.lookingUp}</p>
           </div>
         )}
 
         {(status.kind === "notFound" || status.kind === "lookupFailed") && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
             <p className="text-base font-semibold">
-              {status.kind === "notFound" ? zh.scanner.productNotFound : status.message}
+              {status.kind === "notFound"
+                ? zh.scanner.productNotFoundCode(status.raw)
+                : status.message}
             </p>
             <p className="font-mono text-sm break-all text-white/80">{status.raw}</p>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap justify-center gap-2">
               <button
                 type="button"
                 onClick={() => handleCopy(status.raw)}
@@ -387,6 +529,13 @@ export default function BarcodeScanner({
                 className="h-11 rounded-xl bg-white/15 px-4 text-sm font-semibold"
               >
                 {zh.scanner.scanAgain}
+              </button>
+              <button
+                type="button"
+                onClick={focusManualEntry}
+                className="h-11 rounded-xl bg-white/15 px-4 text-sm font-semibold"
+              >
+                {zh.scanner.manualSearch}
               </button>
             </div>
           </div>

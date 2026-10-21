@@ -1,6 +1,10 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  latestScanDiagnostic,
+  resetScanDiagnosticsForTests,
+} from "@/lib/offline/diagnostics";
 import type { Product } from "@/lib/types";
 
 const mocks = vi.hoisted(() => ({
@@ -53,10 +57,19 @@ vi.mock("@zxing/browser", () => ({
 // Imported after the mocks so the component picks them up.
 const { default: BarcodeScanner } = await import("@/components/barcode-scanner");
 
-type DecodeCallback = (result: { getText: () => string } | undefined) => void;
+type DecodeCallback = (
+  result:
+    | { getText: () => string; getBarcodeFormat?: () => number }
+    | undefined,
+) => void;
 
 let decodeCallback: DecodeCallback | null = null;
-let tracks: Array<{ stop: ReturnType<typeof vi.fn> }> = [];
+let tracks: Array<{
+  stop: ReturnType<typeof vi.fn>;
+  kind?: string;
+  getCapabilities?: () => { torch?: boolean; focusMode?: string[] };
+  applyConstraints?: ReturnType<typeof vi.fn>;
+}> = [];
 
 const PRODUCT: Product = {
   id: "e4247a2f-1e3b-4d64-a05f-ab38906b5292",
@@ -86,9 +99,12 @@ function grantCamera() {
   });
 }
 
-async function emit(value: string) {
+async function emit(value: string, format?: number) {
   await act(async () => {
-    decodeCallback?.({ getText: () => value });
+    decodeCallback?.({
+      getText: () => value,
+      ...(format === undefined ? {} : { getBarcodeFormat: () => format }),
+    });
   });
 }
 
@@ -106,6 +122,7 @@ function renderScanner(props: Partial<React.ComponentProps<typeof BarcodeScanner
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resetScanDiagnosticsForTests();
   decodeCallback = null;
   tracks = [{ stop: vi.fn() }, { stop: vi.fn() }];
   grantCamera();
@@ -132,19 +149,22 @@ describe("camera startup", () => {
   it("asks for the rear camera and reports an active status", async () => {
     renderScanner();
 
-    expect(await screen.findByText("扫描产品条码")).toBeVisible();
-    expect(screen.getByText("请将条码对准扫描框")).toBeVisible();
+    expect(await screen.findByText("正在扫描条码…")).toBeVisible();
+    expect(screen.getByText("保持平稳，将条码放入框内，避免反光")).toBeVisible();
 
     const [constraints] = mocks.decodeFromConstraints.mock.calls[0];
     expect(constraints).toEqual({
-      video: { facingMode: { ideal: "environment" } },
+      video: {
+        facingMode: { ideal: "environment" },
+        focusMode: { ideal: "continuous" },
+      },
       audio: false,
     });
   });
 
   it("starts only one decode loop", async () => {
     renderScanner();
-    await screen.findByText("扫描产品条码");
+    await screen.findByText("正在扫描条码…");
     expect(mocks.decodeFromConstraints).toHaveBeenCalledTimes(1);
   });
 });
@@ -196,7 +216,7 @@ describe("successful decoding", () => {
     });
 
     renderScanner();
-    await screen.findByText("扫描产品条码");
+    await screen.findByText("正在扫描条码…");
     await emit("K10188-13");
 
     await waitFor(() => {
@@ -209,7 +229,7 @@ describe("successful decoding", () => {
     const onCameraReady = vi.fn();
     renderScanner({ onCameraReady });
 
-    await screen.findByText("扫描产品条码");
+    await screen.findByText("正在扫描条码…");
     expect(onCameraReady).toHaveBeenCalledTimes(1);
   });
 
@@ -233,7 +253,7 @@ describe("successful decoding", () => {
     });
 
     renderScanner();
-    await screen.findByText("扫描产品条码");
+    await screen.findByText("正在扫描条码…");
     await emit("K10188-13");
 
     expect(mocks.controlsStop).toHaveBeenCalled();
@@ -250,7 +270,7 @@ describe("successful decoding", () => {
     });
 
     renderScanner();
-    await screen.findByText("扫描产品条码");
+    await screen.findByText("正在扫描条码…");
     await emit("0012345678905");
 
     await waitFor(() => {
@@ -271,7 +291,7 @@ describe("successful decoding", () => {
     const onMultipleResults = vi.fn();
 
     renderScanner({ onMultipleResults });
-    await screen.findByText("扫描产品条码");
+    await screen.findByText("正在扫描条码…");
     await emit("plate");
 
     await waitFor(() => {
@@ -284,10 +304,12 @@ describe("successful decoding", () => {
 describe("unknown barcode", () => {
   it("shows the raw value and offers to copy it", async () => {
     renderScanner();
-    await screen.findByText("扫描产品条码");
+    await screen.findByText("正在扫描条码…");
     await emit("9999999999999");
 
-    expect((await screen.findAllByText("未找到该产品。")).length).toBeGreaterThan(0);
+    expect(
+      (await screen.findAllByText("未找到产品：9999999999999")).length,
+    ).toBeGreaterThan(0);
     expect(screen.getByText("9999999999999")).toBeVisible();
     expect(screen.getByRole("button", { name: "复制编号" })).toBeVisible();
     expect(screen.getByRole("button", { name: "重新扫描" })).toBeVisible();
@@ -297,7 +319,7 @@ describe("unknown barcode", () => {
 describe("repeated detections", () => {
   it("looks up a code only once even when the decoder keeps firing", async () => {
     renderScanner();
-    await screen.findByText("扫描产品条码");
+    await screen.findByText("正在扫描条码…");
 
     await emit("4901234567894");
     await emit("4901234567894");
@@ -310,20 +332,43 @@ describe("repeated detections", () => {
 
   it("ignores a different code once one has been handled", async () => {
     renderScanner();
-    await screen.findByText("扫描产品条码");
+    await screen.findByText("正在扫描条码…");
 
     await emit("1111111111111");
     await emit("2222222222222");
 
-    expect(mocks.scanProductsLocalFirst).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(mocks.scanProductsLocalFirst).toHaveBeenCalledTimes(1);
+    });
     expect(mocks.scanProductsLocalFirst.mock.calls[0][2]).toBe("1111111111111");
+  });
+
+  it("accepts a new code immediately after rescan", async () => {
+    renderScanner();
+    await screen.findByText("正在扫描条码…");
+
+    await emit("1111111111111");
+    expect(
+      (await screen.findAllByText("未找到产品：1111111111111")).length,
+    ).toBeGreaterThan(0);
+
+    await act(async () => {
+      screen.getByRole("button", { name: "重新扫描" }).click();
+    });
+    await screen.findByText("正在扫描条码…");
+    await emit("2222222222222");
+
+    await waitFor(() => {
+      expect(mocks.scanProductsLocalFirst).toHaveBeenCalledTimes(2);
+    });
+    expect(mocks.scanProductsLocalFirst.mock.calls[1][2]).toBe("2222222222222");
   });
 });
 
 describe("cleanup", () => {
   it("releases every MediaStream track on unmount", async () => {
     const view = renderScanner();
-    await screen.findByText("扫描产品条码");
+    await screen.findByText("正在扫描条码…");
 
     view.unmount();
 
@@ -336,7 +381,7 @@ describe("cleanup", () => {
   it("releases the camera when the user closes the scanner", async () => {
     const onClose = vi.fn();
     renderScanner({ onClose });
-    await screen.findByText("扫描产品条码");
+    await screen.findByText("正在扫描条码…");
 
     await act(async () => {
       screen.getByRole("button", { name: "关闭" }).click();
@@ -382,5 +427,152 @@ describe("manual entry", () => {
       expect(mocks.onProduct).toHaveBeenCalledWith(PRODUCT);
     });
     expect(mocks.push).not.toHaveBeenCalled();
+  });
+});
+
+describe("scan stages", () => {
+  it("shows the decoded code before it starts looking the product up", async () => {
+    let resolveLookup: (value: {
+      status: "error";
+      reason: "notFoundLocal";
+      message: string;
+    }) => void = () => {};
+    mocks.scanProductsLocalFirst.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveLookup = resolve;
+        }),
+    );
+
+    renderScanner();
+    await screen.findByText("正在扫描条码…");
+    await emit("TT2101");
+
+    expect(screen.getAllByText("已识别：TT2101").length).toBeGreaterThan(0);
+    expect(mocks.scanProductsLocalFirst).not.toHaveBeenCalled();
+
+    await waitFor(() => {
+      expect(screen.getAllByText("正在查找产品…").length).toBeGreaterThan(0);
+    });
+    expect(screen.queryByText("已识别：TT2101")).toBeNull();
+
+    await act(async () => {
+      resolveLookup({
+        status: "error",
+        reason: "notFoundLocal",
+        message: "missing",
+      });
+    });
+
+    expect(
+      (await screen.findAllByText("未找到产品：TT2101")).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "重新扫描" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "手动输入" })).toBeVisible();
+  });
+
+  it("offers retry and manual search when lookup fails", async () => {
+    mocks.scanProductsLocalFirst.mockResolvedValue({
+      status: "error",
+      reason: "network",
+      message: "资料载入失败，请重试。",
+    });
+
+    renderScanner();
+    await screen.findByText("正在扫描条码…");
+    await emit("KU0509-GR");
+
+    expect(
+      (await screen.findAllByText("资料载入失败，请重试。")).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "重新扫描" })).toBeVisible();
+    await act(async () => {
+      screen.getByRole("button", { name: "手动输入" }).click();
+    });
+    expect(screen.getByLabelText(/无法扫码时，请输入产品编号或条码/)).toHaveFocus();
+  });
+
+  it("records a Code 39 decode and a Code 128 decode", async () => {
+    mocks.scanProductsLocalFirst.mockResolvedValue({
+      status: "match",
+      match: { kind: "single", product: PRODUCT },
+      source: "local",
+    });
+
+    renderScanner();
+    await screen.findByText("正在扫描条码…");
+    await emit("K10188-13", 2);
+
+    await waitFor(() => {
+      expect(mocks.onProduct).toHaveBeenCalledWith(PRODUCT);
+    });
+    expect(latestScanDiagnostic()).toMatchObject({
+      decodedValue: "K10188-13",
+      format: "CODE_39",
+      lookupSource: "local",
+      result: "product",
+    });
+    expect(latestScanDiagnostic()?.decodeMs).toBeGreaterThanOrEqual(0);
+    expect(latestScanDiagnostic()?.lookupMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it("records a Code 128 decode of a numeric code", async () => {
+    mocks.scanProductsLocalFirst.mockResolvedValue({
+      status: "match",
+      match: { kind: "single", product: { ...PRODUCT, code: "78032268" } },
+      source: "local",
+    });
+
+    renderScanner();
+    await screen.findByText("正在扫描条码…");
+    await emit("78032268", 1);
+
+    await waitFor(() => {
+      expect(mocks.scanProductsLocalFirst).toHaveBeenCalled();
+    });
+    expect(mocks.scanProductsLocalFirst.mock.calls[0][2]).toBe("78032268");
+    expect(latestScanDiagnostic()).toMatchObject({
+      decodedValue: "78032268",
+      format: "CODE_128",
+      lookupSource: "local",
+      result: "product",
+    });
+  });
+});
+
+describe("camera aids", () => {
+  it("enables continuous focus and a flashlight when the camera supports them", async () => {
+    const applyConstraints = vi.fn(async () => undefined);
+    tracks = [
+      {
+        stop: vi.fn(),
+        kind: "video",
+        getCapabilities: () => ({ torch: true, focusMode: ["continuous"] }),
+        applyConstraints,
+      },
+    ];
+
+    renderScanner();
+    await screen.findByText("正在扫描条码…");
+
+    await waitFor(() => {
+      expect(applyConstraints).toHaveBeenCalledWith({
+        advanced: [{ focusMode: "continuous" }],
+      });
+    });
+
+    await act(async () => {
+      screen.getByRole("button", { name: "手电筒" }).click();
+    });
+
+    await waitFor(() => {
+      expect(applyConstraints).toHaveBeenCalledWith({
+        advanced: [{ torch: true }],
+      });
+    });
+    expect(screen.getByRole("button", { name: "关闭手电筒" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 });

@@ -63,6 +63,11 @@ describe("service-worker registration", () => {
     expect(source).toMatch(/clients\.claim/);
     expect(source).toMatch(/isApiRequest/);
     expect(source).toMatch(/pathname\.startsWith\("\/api\/"\)/);
+    expect(source).toContain("/api/health");
+    expect(source).toContain("/api/products/catalogue");
+    expect(source).toMatch(/if \(isApiRequest\(url\)\) return;/);
+    expect(source).not.toMatch(/indexedDB|deleteDatabase/);
+    expect(source).toContain("koei-shell-v2");
     expect(source).toMatch(/Authenticated application data must never enter the shell cache/);
     expect(source).toContain('pathname === "/inquiry"');
     expect(source).toContain('pathname === "/inquiries"');

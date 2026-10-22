@@ -6,10 +6,10 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
-import { ApiError } from "@/lib/api-client";
 import { zh } from "@/lib/i18n/zh-cn";
 import type { Product } from "@/lib/types";
 import {
@@ -17,6 +17,12 @@ import {
   type CatalogueAccess,
   type CatalogueMeta,
 } from "@/lib/offline/authorization";
+import {
+  classifySyncFailure,
+  probeServer,
+  SERVER_REACHABLE_EVENT,
+  type ProbeResult,
+} from "@/lib/offline/connectivity";
 import { LOOKUP_MESSAGES } from "@/lib/offline/constants";
 import {
   readCatalogueSnapshot,
@@ -51,6 +57,8 @@ interface CatalogueContextValue {
   /** Set when the local catalogue itself could not be read. */
   localError: string | null;
   sync: () => Promise<void>;
+  /** Same-origin reachability probe. Does not read `navigator.onLine` alone. */
+  recheckNetwork: () => void;
   /** Records that the real camera opened here, completing offline setup. */
   confirmCameraReady: () => void;
   resetLocal: () => void;
@@ -62,7 +70,12 @@ export function CatalogueProvider({ children }: { children: ReactNode }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [meta, setMeta] = useState<CatalogueMeta | null>(null);
   const [readiness, setReadiness] = useState<OfflineReadiness>(NO_READINESS);
-  const [online, setOnline] = useState(isOnline);
+  // `navigatorOnline` is only a hint. `serverReachable` is set from a real
+  // HTTP response or a failed probe, never from the hint alone.
+  const [navigatorOnline, setNavigatorOnline] = useState(isOnline);
+  const [serverReachable, setServerReachable] = useState<boolean | null>(null);
+  const online =
+    serverReachable === true || (serverReachable === null && navigatorOnline);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -139,41 +152,149 @@ export function CatalogueProvider({ children }: { children: ReactNode }) {
   }, [preloadScanner]);
 
   useEffect(() => {
-    function handleOnline() {
-      setOnline(isOnline());
-    }
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOnline);
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOnline);
-      window.clearInterval(timer);
-    };
+    return () => window.clearInterval(timer);
   }, []);
 
-  const applySyncFailure = useCallback(async (error: unknown) => {
+  const applyProbeResult = useCallback((result: ProbeResult, reason: string) => {
+    const hintOnline = isOnline();
+    setNavigatorOnline(hintOnline);
+    if (result.kind === "reachable") {
+      setServerReachable(true);
+      if (result.status === 401) {
+        setSyncError(zh.sync.loginExpired);
+      } else if (result.status >= 500) {
+        setSyncError(zh.sync.serverUnavailable);
+      } else if (reason === "recheck") {
+        setSyncError(null);
+      } else {
+        setSyncError((current) =>
+          current === zh.sync.serverUnreachable ||
+          current === zh.sync.requestTimeout ||
+          current === zh.sync.serverUnavailable ||
+          current === zh.sync.loginExpired
+            ? null
+            : current,
+        );
+      }
+      return;
+    }
+
+    if (reason === "recheck" || !hintOnline) setServerReachable(false);
+    if (reason === "recheck") {
+      setSyncError(
+        result.kind === "timeout" ? zh.sync.requestTimeout : zh.sync.serverUnreachable,
+      );
+    }
+  }, []);
+
+  const scheduleProbeRef = useRef<(reason: string) => void>(() => {});
+
+  useEffect(() => {
+    let cancelled = false;
+    let running = false;
+    let queued: string | null = null;
+
+    async function run(reason: string) {
+      const result = await probeServer(reason);
+      if (cancelled) return;
+      applyProbeResult(result, reason);
+    }
+
+    function schedule(reason: string) {
+      if (cancelled) return;
+      if (running) {
+        queued = reason;
+        return;
+      }
+      running = true;
+      void run(reason).finally(() => {
+        running = false;
+        if (cancelled) return;
+        const next = queued;
+        queued = null;
+        if (next) schedule(next);
+      });
+    }
+
+    scheduleProbeRef.current = schedule;
+
+    function onOnline() {
+      setNavigatorOnline(true);
+      schedule("online");
+    }
+    function onOffline() {
+      setNavigatorOnline(false);
+      schedule("offline");
+    }
+    function onPageShow(event: Event) {
+      const record = event as Event & { persisted?: boolean };
+      schedule(record.persisted ? "pageshow-persisted" : "pageshow");
+    }
+    function onFocus() {
+      schedule("focus");
+    }
+    function onVisibility() {
+      if (document.visibilityState === "visible") schedule("visibility");
+    }
+    function onResume() {
+      schedule("resume");
+    }
+    function onReachable(event: Event) {
+      const status =
+        event instanceof CustomEvent && typeof event.detail === "number" ? event.detail : 0;
+      if (status === 0) return;
+      setServerReachable(true);
+      if (status === 401) setSyncError(zh.sync.loginExpired);
+    }
+
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    window.addEventListener("pageshow", onPageShow);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    document.addEventListener("resume", onResume);
+    window.addEventListener("resume", onResume);
+    window.addEventListener(SERVER_REACHABLE_EVENT, onReachable);
+    schedule("mount");
+
+    return () => {
+      cancelled = true;
+      scheduleProbeRef.current = () => {};
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+      window.removeEventListener("pageshow", onPageShow);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+      document.removeEventListener("resume", onResume);
+      window.removeEventListener("resume", onResume);
+      window.removeEventListener(SERVER_REACHABLE_EVENT, onReachable);
+    };
+  }, [applyProbeResult]);
+
+  const applySyncFailure = useCallback(async (error: unknown, source: "manual" | "background") => {
     const kept = await readCatalogueSnapshot().catch(() => null);
     const usable =
       kept !== null && kept.meta !== null && kept.count === kept.meta.count ? kept.meta : null;
-    const keptReady = inspectCatalogueAccess(usable, Date.now()).kind === "ready";
 
     if (usable && kept) {
       setMeta(usable);
       setProducts(kept.products);
     }
 
-    setSyncError(
-      error instanceof ApiError && error.status === 401
-        ? zh.errors.sessionExpired
-        : keptReady
-          ? LOOKUP_MESSAGES.syncFailed
-          : LOOKUP_MESSAGES.syncFailedRetry,
-    );
+    const message = classifySyncFailure(error);
+    setSyncError(message);
+    const lostNetwork =
+      message === zh.sync.serverUnreachable || message === zh.sync.requestTimeout;
+    if (lostNetwork) {
+      if (source === "manual" || !isOnline()) setServerReachable(false);
+    } else {
+      setServerReachable(true);
+    }
   }, []);
 
   const applySyncResult = useCallback(
-    async (job: Promise<CatalogueSyncResult>) => {
+    async (job: Promise<CatalogueSyncResult>, source: "manual" | "background") => {
       setSyncing(true);
       setSyncError(null);
       try {
@@ -181,12 +302,13 @@ export function CatalogueProvider({ children }: { children: ReactNode }) {
         setProducts(result.products);
         setMeta(result.meta);
         setLocalError(null);
+        setServerReachable(true);
         setNow(Date.now());
         // Scanner and decoder chunks are code-split, so they must be fetched
         // while the connection is still up or the camera cannot start offline.
         await preloadScanner();
       } catch (error) {
-        await applySyncFailure(error);
+        await applySyncFailure(error, source);
       } finally {
         setSyncing(false);
       }
@@ -195,8 +317,14 @@ export function CatalogueProvider({ children }: { children: ReactNode }) {
   );
 
   const sync = useCallback(async () => {
-    await applySyncResult(syncProductCatalogue());
+    setSyncing(true);
+    setSyncError(null);
+    await applySyncResult(syncProductCatalogue(), "manual");
   }, [applySyncResult]);
+
+  const recheckNetwork = useCallback(() => {
+    scheduleProbeRef.current("recheck");
+  }, []);
 
   useEffect(() => {
     if (!hydrated || !online) return;
@@ -204,7 +332,7 @@ export function CatalogueProvider({ children }: { children: ReactNode }) {
     if (!pending) return;
     void (async () => {
       await Promise.resolve();
-      await applySyncResult(pending);
+      await applySyncResult(pending, "background");
     })();
   }, [applySyncResult, hydrated, online]);
 
@@ -231,6 +359,7 @@ export function CatalogueProvider({ children }: { children: ReactNode }) {
       syncError,
       localError,
       sync,
+      recheckNetwork,
       confirmCameraReady,
       resetLocal,
     }),
@@ -245,6 +374,7 @@ export function CatalogueProvider({ children }: { children: ReactNode }) {
       syncError,
       localError,
       sync,
+      recheckNetwork,
       confirmCameraReady,
       resetLocal,
     ],

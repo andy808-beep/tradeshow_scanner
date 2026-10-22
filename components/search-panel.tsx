@@ -5,7 +5,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useCatalogue } from "@/components/catalogue-provider";
 import ProductDetailView from "@/components/product-detail-view";
 import { zh } from "@/lib/i18n/zh-cn";
+import { noteServerResponse } from "@/lib/offline/connectivity";
 import { LOOKUP_MESSAGES } from "@/lib/offline/constants";
+import { offlineDebug } from "@/lib/offline/diagnostics";
 import { lookupLocalSearch, refreshSearchFromApi } from "@/lib/offline/lookup";
 import type { Product } from "@/lib/types";
 import ProductCard from "./product-card";
@@ -75,6 +77,8 @@ export default function SearchPanel() {
           }
           setNetworkError(null);
           setRefreshed({ query: trimmed, products });
+          noteServerResponse(200);
+          offlineDebug("search.source", { source: "network", count: products.length });
         } catch {
           if (!cancelled && !localUsable) {
             setNetworkError({ query: trimmed, message: LOOKUP_MESSAGES.network });
@@ -91,6 +95,12 @@ export default function SearchPanel() {
       controller.abort();
     };
   }, [localUsable, online, trimmed]);
+
+  useEffect(() => {
+    if (online || !localUsable || trimmed === "" || refreshed?.query === trimmed) return;
+    if (local?.status !== "ready" || local.products.length === 0) return;
+    offlineDebug("search.source", { source: "indexeddb", count: local.products.length });
+  }, [local, localUsable, online, refreshed, trimmed]);
 
   function showScanResults(rawValue: string, products: Product[]) {
     setScannerOpen(false);
@@ -114,6 +124,12 @@ export default function SearchPanel() {
       : localUsable && local?.status === "ready"
         ? local.products
         : [];
+  const usingCached =
+    !online &&
+    localUsable &&
+    refreshed?.query !== trimmed &&
+    local?.status === "ready" &&
+    products.length > 0;
 
   const waitingForNetwork =
     trimmed !== "" &&
@@ -216,6 +232,11 @@ export default function SearchPanel() {
 
         {phase === "results" && (
           <>
+            {usingCached && (
+              <p className="mb-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                {zh.search.usingCached}
+              </p>
+            )}
             <p className="mb-2 px-1 text-xs tracking-wide text-porcelain-500 uppercase">
               {zh.search.results(products.length)}
               {refreshingQuery === trimmed ? ` · ${zh.search.refreshing}` : ""}

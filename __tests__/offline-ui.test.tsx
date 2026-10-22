@@ -69,11 +69,18 @@ describe("online/offline status", () => {
     expect(screen.getByRole("button", { name: "同步产品资料" })).toBeEnabled();
   });
 
-  it("shows Offline and disables sync without a network", async () => {
+  it("shows Offline and still allows sync when the browser reports no network", async () => {
     goOffline();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      }),
+    );
     renderCatalogue(<CatalogueStatus />);
     expect(await screen.findByText("离线")).toBeVisible();
-    expect(screen.getByRole("button", { name: "同步产品资料" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "同步产品资料" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "重新检测网络" })).toBeEnabled();
   });
 
   it("warns when no offline catalogue exists", async () => {
@@ -112,7 +119,11 @@ describe("search uses the local catalogue", () => {
       target: { value: "K10188-13" },
     });
     expect(await screen.findByText("K10188-13")).toBeVisible();
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(await screen.findByText("正在使用本机已同步的产品资料。")).toBeVisible();
+    const requested = fetchSpy.mock.calls.map(([input]) =>
+      typeof input === "string" ? input : String(input),
+    );
+    expect(requested.filter((url) => url !== "/api/health")).toEqual([]);
   });
 
   it("does not call a missing catalogue a product miss", async () => {

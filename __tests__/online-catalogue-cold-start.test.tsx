@@ -182,10 +182,10 @@ describe("online cold-start catalogue", () => {
       </>,
     );
 
-    expect(await screen.findByText("正在同步产品资料……")).toBeVisible();
+    expect(await screen.findByText("正在连接并同步…")).toBeVisible();
     typeQuery("K10188-13");
     expect(await screen.findByText("K10188-13")).toBeVisible();
-    expect(screen.getByText("正在同步产品资料……")).toBeVisible();
+    expect(screen.getByText("正在连接并同步…")).toBeVisible();
     expect(catalogueCalls()).toHaveLength(1);
   });
 
@@ -210,7 +210,7 @@ describe("online cold-start catalogue", () => {
     );
 
     expect(await screen.findByText(/产品资料上次同步时间/)).toBeVisible();
-    expect(await screen.findByText(LOOKUP_MESSAGES.syncFailed)).toBeVisible();
+    expect(await screen.findByText("无法连接服务器，请检查网络后重试。")).toBeVisible();
     typeQuery("K10188-13");
     expect(await screen.findByText("K10188-13")).toBeVisible();
     expect(screen.getByText("Abbesses Plate - L")).toBeVisible();
@@ -249,11 +249,11 @@ describe("online cold-start catalogue", () => {
     });
 
     renderApp(<CatalogueStatus />);
-    expect(await screen.findByText("正在同步产品资料……")).toBeVisible();
+    expect(await screen.findByText("正在连接并同步…")).toBeVisible();
     await waitFor(() => expect(catalogueCalls()).toHaveLength(1));
 
     const manual = syncProductCatalogue();
-    fireEvent.click(screen.getByRole("button", { name: "正在同步产品资料……" }));
+    fireEvent.click(screen.getByRole("button", { name: "正在连接并同步…" }));
     expect(catalogueCalls()).toHaveLength(1);
 
     expect(typeof settle).toBe("function");

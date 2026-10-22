@@ -71,6 +71,11 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   // Authenticated application data must never enter the shell cache.
+  // `/api/*` includes `/api/health` and `/api/products/catalogue`. This
+  // handler returns without respondWith, so the browser fetches them
+  // directly and nothing here is written to Cache Storage. A navigation
+  // fallback (cached shell HTML or a synthetic 503) is not evidence that
+  // the API is reachable or unreachable.
   // Inquiry API responses in particular stay out of Cache Storage.
   if (isApiRequest(url)) return;
 

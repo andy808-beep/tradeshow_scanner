@@ -2,6 +2,13 @@ import type { ProductCatalogueResponse } from "@/lib/api-contract";
 import { ApiError } from "@/lib/api-client";
 import type { Product } from "@/lib/types";
 import type { CatalogueMeta } from "./authorization";
+import {
+  catalogueSyncTimeoutMs,
+  fetchWithTimeout,
+  logCatalogueSync,
+  noteServerResponse,
+  resetConnectivityForTests,
+} from "./connectivity";
 import { offlineDebug } from "./diagnostics";
 import {
   readCatalogueSnapshot,
@@ -32,13 +39,23 @@ export class CatalogueVerificationError extends Error {
   }
 }
 
+export class CataloguePayloadError extends Error {
+  constructor() {
+    super("invalid-catalogue");
+    this.name = "CataloguePayloadError";
+  }
+}
+
 export async function fetchProductCatalogue(
   fetcher: typeof fetch = fetch,
 ): Promise<Product[]> {
-  const response = await fetcher("/api/products/catalogue", {
-    cache: "no-store",
-    credentials: "same-origin",
-  });
+  const response = await fetchWithTimeout(
+    "/api/products/catalogue",
+    { cache: "no-store", credentials: "same-origin" },
+    catalogueSyncTimeoutMs(),
+    fetcher,
+  );
+  noteServerResponse(response.status);
   if (!response.ok) {
     let message = "The product catalogue could not be downloaded.";
     try {
@@ -50,9 +67,14 @@ export async function fetchProductCatalogue(
     throw new ApiError(message, response.status);
   }
 
-  const data = (await response.json()) as ProductCatalogueResponse;
+  let data: ProductCatalogueResponse;
+  try {
+    data = (await response.json()) as ProductCatalogueResponse;
+  } catch {
+    throw new CataloguePayloadError();
+  }
   if (!Array.isArray(data.products) || !data.products.every(isProduct)) {
-    throw new Error("The catalogue response was not valid.");
+    throw new CataloguePayloadError();
   }
   return data.products;
 }
@@ -97,17 +119,15 @@ export async function syncProductCatalogue(
 }
 
 /**
- * One automatic refresh after authenticated startup while online. Later
- * calls join the in-flight request or no-op once that attempt has started.
- * Manual {@link syncProductCatalogue} is unaffected after it settles.
+ * One automatic refresh after the app has evidence the server is reachable.
+ * `navigator.onLine` is not consulted: a stuck Safari hint must not skip the
+ * request. Later calls join the in-flight request or no-op once that attempt
+ * has started. Manual {@link syncProductCatalogue} still runs after it settles.
  */
 export function requestBackgroundCatalogueSync(
   now = Date.now(),
   fetcher: typeof fetch = fetch,
 ): Promise<CatalogueSyncResult> | null {
-  if (typeof navigator !== "undefined" && navigator.onLine === false) {
-    return null;
-  }
   if (backgroundRequested) return inFlight;
   backgroundRequested = true;
   return syncProductCatalogue(now, fetcher);
@@ -116,6 +136,7 @@ export function requestBackgroundCatalogueSync(
 export function resetCatalogueSyncForTests(): void {
   inFlight = null;
   backgroundRequested = false;
+  resetConnectivityForTests();
 }
 
 async function runProductCatalogueSync(
@@ -123,6 +144,7 @@ async function runProductCatalogueSync(
   fetcher: typeof fetch,
 ): Promise<CatalogueSyncResult> {
   const previous = await readCatalogueSnapshot();
+  logCatalogueSync("start", { source: "network" });
 
   try {
     const products = await fetchProductCatalogue(fetcher);
@@ -138,8 +160,14 @@ async function runProductCatalogueSync(
       allCodesSearchable: committed.allCodesSearchable,
     });
 
+    logCatalogueSync("end", { source: "network", count: committed.count });
     return { products: committed.products, meta: committed.meta ?? meta };
   } catch (error) {
+    logCatalogueSync("end", {
+      source: "indexeddb",
+      category: error instanceof Error ? error.name : "unknown",
+      count: previous.count,
+    });
     offlineDebug("sync.failed", {
       error: error instanceof Error ? error.name : "unknown",
       previousCount: previous.count,

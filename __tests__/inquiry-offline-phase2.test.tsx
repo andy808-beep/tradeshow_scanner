@@ -173,7 +173,11 @@ describe("/inquiry opens offline from the cached shell", () => {
     renderApp(<AppScreens>{null}</AppScreens>);
 
     expect(await screen.findByText("询问单中还没有产品")).toBeVisible();
-    expect(fetchSpy).not.toHaveBeenCalled();
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+    const requested = fetchSpy.mock.calls.map(([input]) =>
+      typeof input === "string" ? input : String(input),
+    );
+    expect(requested.every((url) => url === "/api/health")).toBe(true);
     expect(screen.queryByRole("button", { name: "保存询问单" })).toBeNull();
   });
 });

@@ -10,8 +10,17 @@ import { useCatalogue } from "./catalogue-provider";
 const BarcodeScanner = dynamic(() => import("./barcode-scanner"), { ssr: false });
 
 export default function CatalogueStatus() {
-  const { access, online, syncing, syncError, sync, meta, stage, confirmCameraReady } =
-    useCatalogue();
+  const {
+    access,
+    online,
+    syncing,
+    syncError,
+    sync,
+    recheckNetwork,
+    meta,
+    stage,
+    confirmCameraReady,
+  } = useCatalogue();
   const [testingCamera, setTestingCamera] = useState(false);
 
   const lastSynced = access.kind === "missing" ? null : access.meta.lastSyncedAt;
@@ -27,7 +36,7 @@ export default function CatalogueStatus() {
         >
           {online ? zh.sync.online : zh.sync.offline}
         </p>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {stage === "cameraTest" && (
             <button
               type="button"
@@ -37,12 +46,22 @@ export default function CatalogueStatus() {
               {zh.scanner.testCamera}
             </button>
           )}
+          {!online && (
+            <button
+              type="button"
+              onClick={recheckNetwork}
+              disabled={syncing}
+              className="rounded-lg border border-porcelain-400 px-2.5 py-1 text-[11px] font-semibold text-porcelain-800 disabled:bg-porcelain-300"
+            >
+              {zh.sync.recheckNetwork}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => {
               void sync();
             }}
-            disabled={syncing || !online}
+            disabled={syncing}
             className="rounded-lg bg-porcelain-700 px-2.5 py-1 text-[11px] font-semibold text-white disabled:bg-porcelain-300"
           >
             {syncing ? zh.sync.syncingProducts : zh.sync.syncProducts}
@@ -93,6 +112,14 @@ export default function CatalogueStatus() {
           }`}
         >
           {syncError}
+          {syncError === zh.sync.loginExpired && (
+            <>
+              {" "}
+              <a href="/login" className="font-semibold underline">
+                {zh.sync.signInAgain}
+              </a>
+            </>
+          )}
         </p>
       )}
 
